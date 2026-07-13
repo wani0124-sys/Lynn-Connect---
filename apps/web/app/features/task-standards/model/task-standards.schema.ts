@@ -45,3 +45,10 @@ export function validateTitle(title: string): string | null {
   if (title.length > 500) return "제목은 500자를 넘을 수 없습니다."
   return null
 }
+
+export function validateAttachmentFilename(filename: string): string | null {
+  if (!filename.trim()) return "파일 이름을 입력하세요."
+  if (filename.length > 255) return "파일 이름은 255자를 넘을 수 없습니다."
+  if (/[/\\]/.test(filename)) return "파일 이름에 / 또는 \\ 를 쓸 수 없습니다."
+  return null
+}

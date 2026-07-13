@@ -543,6 +543,11 @@ export async function addAttachment(
   return { id: attachmentId, filename: file.filename, mimeType: file.mimeType }
 }
 
+export async function renameAttachment(id: string, filename: string): Promise<void> {
+  const { error } = await getSupabaseServerClient().from(TABLE_ATTACHMENTS).update({ filename }).eq("id", id)
+  if (error) throw new Error(`첨부파일 이름을 수정하지 못했습니다: ${error.message}`)
+}
+
 export async function deleteAttachment(id: string): Promise<void> {
   const supabase = getSupabaseServerClient()
   const { data: row } = await supabase.from(TABLE_ATTACHMENTS).select("storage_path").eq("id", id).maybeSingle()

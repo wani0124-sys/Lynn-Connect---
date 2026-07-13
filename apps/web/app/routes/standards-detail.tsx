@@ -20,9 +20,14 @@ import {
   getPostById,
   listCategories,
   listDepartments,
+  renameAttachment,
   updatePostMeta,
 } from "~/features/task-standards/model/task-standards.repository.server"
-import { validateAttachmentFile, validateTitle } from "~/features/task-standards/model/task-standards.schema"
+import {
+  validateAttachmentFile,
+  validateAttachmentFilename,
+  validateTitle,
+} from "~/features/task-standards/model/task-standards.schema"
 import { formatDateTime } from "~/shared/lib/format"
 import { Button } from "~/shared/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "~/shared/ui/card"
@@ -81,6 +86,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
         await addAttachment(postId, { filename: file.name, mimeType: file.type || null, content: buffer })
         return { ok: true }
       }
+      case "attachment.rename": {
+        const filename = String(form.get("filename") ?? "").trim()
+        const validationError = validateAttachmentFilename(filename)
+        if (validationError) return data({ error: validationError }, { status: 400 })
+        await renameAttachment(String(form.get("id") ?? ""), filename)
+        return { ok: true }
+      }
       case "attachment.delete": {
         await deleteAttachment(String(form.get("id") ?? ""))
         return { ok: true }
@@ -106,6 +118,8 @@ export default function StandardsDetailRoute() {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(post?.title ?? "")
+  const [editingAttachmentId, setEditingAttachmentId] = useState<string | null>(null)
+  const [attachmentFilenameDraft, setAttachmentFilenameDraft] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -157,6 +171,26 @@ export default function StandardsDetailRoute() {
     }
     metaFetcher.submit({ intent: "meta.update", title: trimmed }, { method: "post" })
     setIsEditingTitle(false)
+  }
+
+  const startRenameAttachment = (attachmentId: string, currentFilename: string) => {
+    setEditingAttachmentId(attachmentId)
+    setAttachmentFilenameDraft(currentFilename)
+  }
+
+  const cancelRenameAttachment = () => {
+    setEditingAttachmentId(null)
+    setAttachmentFilenameDraft("")
+  }
+
+  const saveRenameAttachment = (attachmentId: string, currentFilename: string) => {
+    const trimmed = attachmentFilenameDraft.trim()
+    if (!trimmed || trimmed === currentFilename) {
+      cancelRenameAttachment()
+      return
+    }
+    attachmentFetcher.submit({ intent: "attachment.rename", id: attachmentId, filename: trimmed }, { method: "post" })
+    setEditingAttachmentId(null)
   }
 
   return (
@@ -305,30 +339,75 @@ export default function StandardsDetailRoute() {
             <ul className="divide-y divide-border rounded-md border border-border">
               {post.attachments.map((att) => (
                 <li key={att.id} className="flex items-center justify-between gap-2 p-3">
-                  <span className="flex items-center gap-2 truncate text-sm">
-                    <Paperclip className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                    {att.filename}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {attachmentUrls[att.id] ? (
-                      <a href={attachmentUrls[att.id]} download={att.filename}>
-                        <Button type="button" variant="ghost" size="icon" aria-label="다운로드">
-                          <Download className="size-4" aria-hidden />
-                        </Button>
-                      </a>
-                    ) : null}
-                    {canManage ? (
+                  {editingAttachmentId === att.id ? (
+                    <div className="flex flex-1 items-center gap-1">
+                      <Paperclip className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                      <Input
+                        autoFocus
+                        value={attachmentFilenameDraft}
+                        onChange={(e) => setAttachmentFilenameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveRenameAttachment(att.id, att.filename)
+                          if (e.key === "Escape") cancelRenameAttachment()
+                        }}
+                        maxLength={255}
+                        className="h-8"
+                        aria-label="파일 이름"
+                      />
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        aria-label="삭제"
-                        disabled={attachmentFetcher.state !== "idle"}
-                        onClick={() => attachmentFetcher.submit({ intent: "attachment.delete", id: att.id }, { method: "post" })}
+                        aria-label="저장"
+                        onClick={() => saveRenameAttachment(att.id, att.filename)}
                       >
-                        <Trash2 className="size-4 text-danger" aria-hidden />
+                        <Check className="size-4" aria-hidden />
                       </Button>
-                    ) : null}
+                      <Button type="button" variant="ghost" size="icon" aria-label="취소" onClick={cancelRenameAttachment}>
+                        <X className="size-4" aria-hidden />
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="flex items-center gap-2 truncate text-sm">
+                      <Paperclip className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                      {att.filename}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1">
+                    {editingAttachmentId === att.id ? null : (
+                      <>
+                        {attachmentUrls[att.id] ? (
+                          <a href={attachmentUrls[att.id]} download={att.filename}>
+                            <Button type="button" variant="ghost" size="icon" aria-label="다운로드">
+                              <Download className="size-4" aria-hidden />
+                            </Button>
+                          </a>
+                        ) : null}
+                        {canManage ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label="이름 수정"
+                            onClick={() => startRenameAttachment(att.id, att.filename)}
+                          >
+                            <Pencil className="size-4" aria-hidden />
+                          </Button>
+                        ) : null}
+                        {canManage ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label="삭제"
+                            disabled={attachmentFetcher.state !== "idle"}
+                            onClick={() => attachmentFetcher.submit({ intent: "attachment.delete", id: att.id }, { method: "post" })}
+                          >
+                            <Trash2 className="size-4 text-danger" aria-hidden />
+                          </Button>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                 </li>
               ))}
