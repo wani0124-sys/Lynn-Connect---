@@ -1,5 +1,5 @@
 import { createCookieSessionStorage, redirect } from "react-router"
-import { findMemberById, isHeadquarters, type Member } from "~/entities/member/model/member"
+import { canWriteSite, findMemberById, isHeadquarters, type Member } from "~/entities/member/model/member"
 
 // TODO[security]: 데모용 기본 시크릿. 운영에서는 반드시 SESSION_SECRET 환경변수를 설정한다.
 const sessionSecret = process.env.SESSION_SECRET ?? "dev-insecure-session-secret-change-me"
@@ -63,6 +63,16 @@ export async function requireUser(request: Request): Promise<Member> {
 export async function requireHeadquarters(request: Request): Promise<Member> {
   const user = await requireUser(request)
   if (!isHeadquarters(user.role)) {
+    throw redirect("/forbidden")
+  }
+  return user
+}
+
+// 현장이 자기 현장 자료(점검 기록 등)를 직접 작성하는 route action에서 호출한다.
+// 본사는 모든 현장에, 현장 계정은 자신이 소속된 현장에만 쓸 수 있다. 그 외에는 /forbidden으로 보낸다.
+export async function requireSiteWriteAccess(request: Request, siteId: number): Promise<Member> {
+  const user = await requireUser(request)
+  if (!canWriteSite(user, siteId)) {
     throw redirect("/forbidden")
   }
   return user

@@ -1,37 +1,45 @@
-// 실제로는 fetchDashboard를 실제 API 호출로 교체하고, 응답 스키마를 zod로 검증한다.
 import { useEffect, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
 import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router"
-import { Clock, Package, Users, Wallet } from "lucide-react"
+import { Mail } from "lucide-react"
 import { MEMBER_ROLE_LABEL } from "~/entities/member/model/member"
+import type { SiteWithLatestInspection } from "~/entities/site/model/site.types"
+import { InspectionResultBadge } from "~/entities/site/ui/inspection-result-badge"
 import { requireUser } from "~/features/auth/model/session.server"
-import { mockItems } from "~/entities/item/model/item.mock"
-import { ItemStatusBadge } from "~/entities/item/ui/item-status-badge"
-import { formatCurrency, formatDate } from "~/shared/lib/format"
-import { Button } from "~/shared/ui/button"
+import { listSitesWithLatestInspection } from "~/features/sites/model/sites.repository.server"
+import { listCategories, listPosts } from "~/features/task-standards/model/task-standards.repository.server"
+import type { StandardPostListItem } from "~/entities/task-standard/model/task-standard.types"
+import { formatDate } from "~/shared/lib/format"
 import { Card, CardContent, CardHeader, CardTitle } from "~/shared/ui/card"
-import { ErrorState } from "~/shared/ui/error-state"
 import { PageHeader } from "~/shared/ui/page-header"
-import { Placeholder } from "~/shared/ui/placeholder"
-import { Skeleton } from "~/shared/ui/skeleton"
-import { StatCard } from "~/shared/ui/stat-card"
-import { TBody, THead, TD, TH, TR, Table } from "~/shared/ui/table"
 
-async function fetchDashboard() {
-  await new Promise((r) => setTimeout(r, 600))
-  return {
-    stats: [
-      { label: "전체 항목", value: "1,284", delta: "지난주 대비 +4.2%", trend: "up" },
-      { label: "대기 중", value: "37", delta: "어제 대비 -3건", trend: "down" },
-      { label: "활성 구성원", value: "52", delta: "변동 없음", trend: "flat" },
-      { label: "이번 달 처리액", value: formatCurrency(84200000), delta: "목표의 68%", trend: "up" },
-    ],
-  }
-}
+const STANDARDS_HIGHLIGHT_LIMIT = 3
+const STANDARDS_HIGHLIGHT_CATEGORY_NAMES = ["업무기준", "시공기준"] as const
+const SITES_HIGHLIGHT_LIMIT = 6
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireUser(request)
-  return { user }
+  const categories = await listCategories()
+
+  const standardsHighlight = await Promise.all(
+    STANDARDS_HIGHLIGHT_CATEGORY_NAMES.map(async (name) => {
+      const category = categories.find((c) => c.name === name)
+      const postList = category
+        ? await listPosts({ categoryId: String(category.id), sort: "sent_desc", page: 1, limit: STANDARDS_HIGHLIGHT_LIMIT })
+        : { rows: [], total: 0, page: 1, limit: STANDARDS_HIGHLIGHT_LIMIT }
+      return { label: name, categoryId: category?.id ?? null, posts: postList.rows, total: postList.total }
+    }),
+  )
+
+  // sites/site_inspections migration이 아직 적용되지 않은 환경에서도 나머지 대시보드는 뜨도록 방어한다.
+  let sitesHighlight: SiteWithLatestInspection[] = []
+  try {
+    const allSites = await listSitesWithLatestInspection()
+    sitesHighlight = allSites.slice(0, SITES_HIGHLIGHT_LIMIT)
+  } catch (error) {
+    console.error("현장 목록을 불러오지 못했습니다(마이그레이션 미적용 가능성):", error)
+  }
+
+  return { user, standardsHighlight, sitesHighlight }
 }
 
 function DashboardBanner({ user }: { user: any }) {
@@ -75,115 +83,126 @@ function DashboardBanner({ user }: { user: any }) {
   )
 }
 
+function StandardsMailList({
+  label,
+  categoryId,
+  posts,
+}: {
+  label: string
+  categoryId: number | null
+  posts: StandardPostListItem[]
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-sm font-semibold text-foreground">{label}</p>
+        <Link
+          to={categoryId ? `/standards?cat=${categoryId}` : "/standards"}
+          className="text-xs font-medium text-muted-foreground hover:text-primary"
+        >
+          더보기 +
+        </Link>
+      </div>
+      {posts.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">게시글이 없습니다.</p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {posts.map((post) => (
+            <li key={post.id} className="flex items-center gap-3 py-2">
+              <Mail className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <Link to={`/standards/${post.id}`} className="min-w-0 flex-1 truncate text-sm hover:underline">
+                {post.title}
+              </Link>
+              <span className="w-16 shrink-0 truncate text-right text-sm font-medium text-foreground">
+                {post.senderName ?? "-"}
+              </span>
+              <span className="w-20 shrink-0 text-right text-xs text-muted-foreground">
+                {formatDate(post.sentAt ?? post.createdAt)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function StandardsHighlightBanner({
+  highlight,
+}: {
+  highlight: { label: string; categoryId: number | null; posts: StandardPostListItem[]; total: number }[]
+}) {
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="flex-row items-center justify-between border-b border-border bg-accent pb-5">
+        <CardTitle>부서별 업무기준</CardTitle>
+        <Link to="/standards" className="text-sm font-medium text-primary hover:underline">
+          전체 보기
+        </Link>
+      </CardHeader>
+      <CardContent className="grid gap-6 pt-5 sm:grid-cols-2">
+        {highlight.map((section) => (
+          <StandardsMailList
+            key={section.label}
+            label={section.label}
+            categoryId={section.categoryId}
+            posts={section.posts}
+          />
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
+function SitesHighlightBanner({ sites }: { sites: SiteWithLatestInspection[] }) {
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="flex-row items-center justify-between border-b border-border bg-accent pb-5">
+        <CardTitle>현장 점검</CardTitle>
+        <Link to="/sites" className="text-sm font-medium text-primary hover:underline">
+          전체 보기
+        </Link>
+      </CardHeader>
+      <CardContent className="pt-5">
+        {sites.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">등록된 현장이 없습니다.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {sites.map((site) => (
+              <Link
+                key={site.id}
+                to={`/sites/${site.id}`}
+                className="min-w-0 rounded-lg border border-border p-3 transition-colors hover:border-primary/40"
+              >
+                <p className="truncate text-sm font-semibold text-foreground">{site.name}</p>
+                {site.latestInspection ? (
+                  <div className="mt-1.5 flex items-center justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{site.latestInspection.title}</span>
+                    <InspectionResultBadge result={site.latestInspection.result} />
+                  </div>
+                ) : (
+                  <p className="mt-1.5 text-xs text-muted-foreground">점검 기록 없음</p>
+                )}
+              </Link>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function DashboardRoute() {
-  const { user } = useLoaderData<typeof loader>()
-  const { isPending, isError, refetch } = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: fetchDashboard,
-  })
+  const { user, standardsHighlight, sitesHighlight } = useLoaderData<typeof loader>()
 
   return (
     <div className="space-y-6">
       <DashboardBanner user={user} />
 
-      <PageHeader
-        title="대시보드"
-        description={`${user.name}님, 오늘의 주요 지표와 최근 활동입니다.`}
-        actions={<Button variant="outline">기간: 최근 7일</Button>}
-      />
+      <PageHeader title="대시보드" description={`${user.name}님, 환영합니다.`} />
 
-      {isError ? (
-        <ErrorState onRetry={() => refetch()} />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {isPending ? (
-            <>
-              <Skeleton className="h-28" />
-              <Skeleton className="h-28" />
-              <Skeleton className="h-28" />
-              <Skeleton className="h-28" />
-            </>
-          ) : (
-            <>
-              <StatCard
-                label="전체 항목"
-                value="1,284"
-                icon={<Package />}
-                delta={{ value: "지난주 대비 +4.2%", trend: "up" }}
-              />
-              <StatCard
-                label="대기 중"
-                value="37"
-                icon={<Clock />}
-                delta={{ value: "어제 대비 -3건", trend: "down" }}
-              />
-              <StatCard
-                label="활성 구성원"
-                value="52"
-                icon={<Users />}
-                delta={{ value: "변동 없음", trend: "flat" }}
-              />
-              <StatCard
-                label="이번 달 처리액"
-                value={formatCurrency(84200000)}
-                icon={<Wallet />}
-                delta={{ value: "목표의 68%", trend: "up" }}
-              />
-            </>
-          )}
-        </div>
-      )}
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>최근 활동</CardTitle>
-            <Link to="/items" className="text-sm font-medium text-primary hover:underline">
-              전체 보기
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <THead>
-                <TR>
-                  <TH>항목</TH>
-                  <TH>상태</TH>
-                  <TH>담당자</TH>
-                  <TH>수정일</TH>
-                </TR>
-              </THead>
-              <TBody>
-                {mockItems.slice(0, 5).map((item) => (
-                  <TR key={item.id}>
-                    <TD>
-                      <Link to={`/items/${item.id}`} className="font-medium hover:underline">
-                        {item.name}
-                      </Link>
-                    </TD>
-                    <TD>
-                      <ItemStatusBadge status={item.status} />
-                    </TD>
-                    <TD>{item.owner}</TD>
-                    <TD>{formatDate(item.updatedAt)}</TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>요약 위젯</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Placeholder
-              title="차트 / 요약 영역"
-              description="여기에 추세 차트, 승인 대기 목록, 알림 요약 등을 배치하세요."
-            />
-          </CardContent>
-        </Card>
-      </div>
+      <StandardsHighlightBanner highlight={standardsHighlight} />
+      <SitesHighlightBanner sites={sitesHighlight} />
     </div>
   )
 }
