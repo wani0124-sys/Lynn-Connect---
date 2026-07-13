@@ -8,7 +8,29 @@
 
 ---
 
+## [2.4-draft] - 2026-07-13
+
+### 추가
+- **현장 점검 이력 관리** (`/sites`, `/sites/:siteId`) — 현장(공사현장) 목록을 관리하고, 현장이 받는 대외 점검(관공서·감리단·발주처·자체점검 등) 기록을 점검명/점검기관/점검일/결과(적합·부적합·시정조치)/다음 점검 예정일/재점검 여부/비고/첨부파일과 함께 남긴다. `entities/site`, `features/sites`로 구성. `AGENTS.md` Project Override 핵심 기능 2번(점검 보고서)을 구현했다.
+- DB: `sites`/`site_inspections`/`site_inspection_attachments` 테이블과 `site-inspections` storage 버킷 (`supabase/migrations/20260713090000_site_inspections.sql`). **주의**: 이 migration은 아직 실제 Supabase 프로젝트에 적용되지 않았다 — Supabase SQL Editor 등에서 직접 실행해야 `/sites` 화면이 정상 동작한다.
+- 대시보드에 "현장 점검" 위젯 추가 — 현장 카드(최대 6개)를 클릭하면 해당 현장의 점검 이력 화면으로 이동.
+- 사이드바 네비게이션에 "현장 점검" 메뉴 추가.
+
+### 제거
+- **전국 날씨 위젯**(대시보드) 전체 삭제 — `features/weather/`, `.env.example`의 `KMA_SERVICE_KEY`. 본사↔현장 정보 공유라는 프로젝트 목적과 무관하다는 판단에 따라 현장 점검 위젯으로 대체했다.
+
+### 변경 — 현장 점검 쓰기 권한을 본사 전용에서 "현장은 자기 현장만" 으로 전환
+- `entities/member`: `Member`에 `siteId`(계정 1개 = 현장 1곳) 추가, `canWriteSite(user, siteId)` 헬퍼 추가 — 본사는 모든 현장에, 현장 계정은 자신이 소속된 현장에만 쓸 수 있다. 읽기는 기존과 동일하게 로그인한 모든 사용자에게 열려 있다(본사·타 현장 자료 열람 가능).
+- `features/auth/model/session.server.ts`: `requireSiteWriteAccess(request, siteId)` 추가. `/sites/:siteId`의 점검 기록 추가·삭제 action이 `requireHeadquarters` 대신 이 헬퍼를 쓰도록 변경.
+- 현장(공사현장) 카탈로그 자체의 추가·수정·삭제(`/sites`의 "현장 관리")는 계속 본사(admin/manager) 전용이다 — 바뀐 것은 "점검 기록" 작성 권한뿐이다.
+- 데모 계정 `member@woomi.dev`의 `siteId`를 1로 임시 지정했다(신규 `sites` 테이블은 id 1부터 시작). 다른 현장을 먼저 만들면 이 값을 실제 현장 id에 맞게 조정해야 한다. `/members`에는 아직 siteId를 배정하는 UI가 없다(스캐폴드 상태) — 지금은 `entities/member/model/member.ts`를 직접 수정해서 배정한다.
+
+---
+
 ## [2.3-draft] - 2026-07-10
+
+### 문서 (2026-07-13)
+- 루트 `README.md`를 실제 프로젝트 현황에 맞게 갱신 — 템플릿 소개 중심에서 Lynn-Connect 현재 화면/기능 상태(부서별 업무기준=실제, 대시보드/항목/구성원/설정=스캐폴드, 점검 보고서=미착수) 안내로 재구성. `apps/web/README.md`의 화면 지도 표에 누락돼 있던 `/standards`, `/standards/new`, `/standards/:postId` 라우트를 추가.
 
 ### 추가
 - **부서별 업무기준 게시판** (`/standards`, `/standards/new`, `/standards/:postId`) — 본사 기준·공지 메일(.eml)을 업로드하면 파싱해 부서(2단계 계층)/구분자(색상)별로 정리하는 게시판. `entities/task-standard`, `features/task-standards`로 구성. `코딩연습`(레거시 Express+SQLite 앱)의 `/standards` 기능을 Supabase 기반으로 포팅했다.

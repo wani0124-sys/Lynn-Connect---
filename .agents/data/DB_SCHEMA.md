@@ -318,4 +318,78 @@ Notes:
   - post 삭제 시 on delete cascade로 attachment row는 자동 삭제되지만, storage 파일은 앱 코드(deletePost)에서 별도로 제거한다.
   - Storage 버킷 task-standards는 mail-archive와 동일하게 private(public=false)이며 서버가 service role key로만 업로드하고 다운로드는 signed URL(TTL 300초)로 발급한다.
   - 코딩연습/standards.db(레거시 SQLite)의 실제 데이터(게시글 167건, 부서 29개, 구분자 3개, 첨부 482개/약 399MB)를 이 스키마로 옮기는 scripts/migrate-task-standards.mjs를 준비해두었다. 실행은 SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY 자격증명이 준비된 이후 별도로 진행한다(2026-07-10 기준 미실행).
+
+Schema: public
+Table: sites
+Purpose: 현장(공사현장) 목록. 부서 트리의 "현장" 부서와는 별개의 전용 엔티티로 신설했다(현장은 계층이 없는 평면 목록이고, 주소 등 현장 고유 속성을 가진다).
+Columns:
+  id bigint (identity)
+  name text
+  address text (nullable)
+  sort_order int
+  created_at timestamptz
+  updated_at timestamptz
+Primary key: id
+Foreign keys: 없음
+Indexes: 없음(테이블 크기가 작아 근거 부족, monitoring candidate)
+Unique constraints: sites_name_key (name)
+RLS policies: RLS enabled. sites_no_direct_access(전체 거부, anon/authenticated) — service role로만 접근.
+RPC/functions: 없음
+Related APIs: apps/web/app/routes/sites.tsx (loader/action, intent=site.*) — apps/web/app/features/sites/model/sites.repository.server.ts를 직접 호출
+Related frontend screens: /sites (현장 카드 목록 + 현장 관리 모달), 대시보드 현장 점검 위젯
+Migration file: supabase/migrations/20260713090000_site_inspections.sql
+Notes: 현장 삭제 시 site_inspections/site_inspection_attachments는 on delete cascade로 함께 삭제되며, 삭제 전 앱 코드(deleteSite)에서 첨부파일 storage 객체를 먼저 정리한다.
+
+Schema: public
+Table: site_inspections
+Purpose: 현장이 받는 대외 점검(관공서/감리단/발주처/자체점검 등) 이력.
+Columns:
+  id uuid
+  site_id bigint (FK, on delete cascade)
+  title text            -- 점검명, 예: "정기 소방안전점검"
+  inspector_org text     -- 점검기관/주체
+  inspected_at date
+  result text            -- 앱 레이어에서 "적합"/"부적합"/"시정조치" 3값으로 검증(SITE_INSPECTION_RESULTS), DB enum/CHECK 제약은 없음
+  next_inspection_at date (nullable)
+  requires_reinspection boolean (기본 false)
+  note text (nullable)
+  created_by text
+  updated_by text
+  created_at timestamptz
+  updated_at timestamptz
+Primary key: id
+Foreign keys: site_id -> sites(id) on delete cascade
+Indexes: site_inspections_site_id_idx, site_inspections_inspected_at_idx (inspected_at desc)
+Unique constraints: 없음
+RLS policies: RLS enabled. site_inspections_no_direct_access(전체 거부, anon/authenticated).
+RPC/functions: 없음
+Related APIs: apps/web/app/routes/site-detail.tsx (loader: listInspections, action: intent=inspection.create/inspection.delete)
+Related frontend screens: /sites/:siteId (점검 이력 목록 + 점검 기록 추가 모달), 대시보드 현장 점검 위젯(현장별 최신 1건)
+Migration file: supabase/migrations/20260713090000_site_inspections.sql
+Notes:
+  - 쓰기 권한은 `requireSiteWriteAccess(request, siteId)`(`canWriteSite`)로 판정한다. 본사(admin/manager)는 모든 site_id에, 현장(member) 계정은 자신의 Member.siteId와 일치하는 site_id에만 쓸 수 있다. 읽기는 loader의 `requireUser`만으로 전체 공개(본사·타 현장 자료 열람 가능).
+  - 수정(edit) API는 없다 — 잘못 입력한 기록은 삭제 후 재등록한다. 필요해지면 updateInspection을 추가한다.
+
+Schema: public
+Table: site_inspection_attachments
+Purpose: site_inspections에 종속된 첨부파일(점검 결과 통보서 등) 메타. 실제 파일 바이너리는 Storage 버킷 site-inspections에 저장한다.
+Columns:
+  id uuid
+  inspection_id uuid (FK, on delete cascade)
+  filename text
+  storage_path text
+  mime_type text
+  created_at timestamptz
+Primary key: id
+Foreign keys: inspection_id -> site_inspections(id) on delete cascade
+Indexes: site_inspection_attachments_inspection_id_idx
+Unique constraints: 없음
+RLS policies: RLS enabled. site_inspection_attachments_no_direct_access(전체 거부, anon/authenticated).
+RPC/functions: 없음
+Related APIs: apps/web/app/features/sites/model/sites.repository.server.ts (createInspection 내 업로드, addInspectionAttachment/deleteInspectionAttachment/getInspectionAttachmentDownloadUrl — 후자 2개는 현재 라우트에서 호출하지 않는 예비 함수)
+Related frontend screens: /sites/:siteId (점검 기록 추가 시 다중 파일 첨부, 목록에서 다운로드)
+Migration file: supabase/migrations/20260713090000_site_inspections.sql
+Notes:
+  - Storage 버킷 site-inspections는 task-standards와 동일하게 private(public=false)이며 서버가 service role key로만 업로드하고 다운로드는 signed URL(TTL 300초)로 발급한다.
+  - 이 migration은 작성 시점(2026-07-13) 기준 실제 Supabase 프로젝트에 아직 적용되지 않았다 — 적용 전에는 /sites 관련 화면이 "Could not find the table" 오류로 500을 반환한다.
 ```

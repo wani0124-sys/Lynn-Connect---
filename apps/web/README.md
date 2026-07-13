@@ -1,6 +1,6 @@
-# Woomi 관리자 스캐폴드 (web)
+# Lynn-Connect web
 
-React Router v7 기반 **관리자 SaaS 스캐폴드**다. 비개발자도 바로 실행해 미리 보면서 "어디에 무엇을 넣을지" 감을 잡도록 만든 범용 뼈대다. 도메인은 중립 placeholder(항목/구성원)이며, 실제 도메인에 맞게 교체해 사용한다.
+React Router v7 기반 Lynn-Connect(본사 ↔ 현장 정보 공유 플랫폼) 앱이다. Woomi 관리자 SaaS 템플릿에서 시작했으며, `/standards`(부서별 업무기준)와 `/sites`(현장 점검)는 실제 구현된 기능이고 나머지 화면(항목 관리/구성원/설정)은 아직 템플릿이 제공하는 도메인 중립 placeholder다. 실제 도메인에 맞게 순차적으로 교체한다.
 
 ---
 
@@ -39,17 +39,22 @@ pnpm typecheck   # 타입 검사
 
 ## 화면 지도
 
-| 경로 | 파일 | 목적 |
-| --- | --- | --- |
-| `/login` | `app/routes/login.tsx` | 로그인 (앱 셸 밖 독립 화면) |
-| `/` | `app/routes/dashboard.tsx` | 대시보드 — KPI와 최근 활동 |
-| `/items` | `app/routes/items.tsx` | 항목 목록 — 검색·필터, 상태 미리보기 |
-| `/items/:itemId` | `app/routes/item-detail.tsx` | 항목 상세 — 정보와 삭제 확인 |
-| `/members` | `app/routes/members.tsx` | 구성원 — 역할·권한 관리 |
-| `/settings` | `app/routes/settings.tsx` | 설정 — 프로필, 알림, 위험 구역 |
-| `/logout` | `app/routes/logout.tsx` | 로그아웃 (세션 파기 후 로그인으로) |
-| `/forbidden` | `app/routes/forbidden.tsx` | 접근 거부 화면 |
-| `*` | `app/routes/$.tsx` | 404 (없는 주소) |
+| 경로 | 파일 | 목적 | 상태 |
+| --- | --- | --- | --- |
+| `/login` | `app/routes/login.tsx` | 로그인 (앱 셸 밖 독립 화면) | 실제 |
+| `/` | `app/routes/dashboard.tsx` | 대시보드 — 부서별 업무기준·현장 점검 요약 위젯 | 실제 |
+| `/standards` | `app/routes/standards.tsx` | 부서별 업무기준 목록 — 부서/구분자 탭, 검색, 일괄 수정·삭제 | 실제 |
+| `/standards/new` | `app/routes/standards-new.tsx` | EML 업로드 | 실제 |
+| `/standards/:postId` | `app/routes/standards-detail.tsx` | 업무기준 상세 — 본문, 첨부파일, 제목/부서/구분자 수정 | 실제 |
+| `/sites` | `app/routes/sites.tsx` | 현장 목록 — 현장별 최근 점검 결과 카드, 현장 관리(추가·수정·삭제·순서) | 실제 |
+| `/sites/:siteId` | `app/routes/site-detail.tsx` | 현장 상세 — 대외 점검 이력(점검기관/결과/다음 점검 예정일/첨부) 등록·조회·삭제 | 실제 |
+| `/items` | `app/routes/items.tsx` | 항목 목록 — 검색·필터, 상태 미리보기 | 스캐폴드 |
+| `/items/:itemId` | `app/routes/item-detail.tsx` | 항목 상세 — 정보와 삭제 확인 | 스캐폴드 |
+| `/members` | `app/routes/members.tsx` | 구성원 — 역할·권한 관리 | 스캐폴드 |
+| `/settings` | `app/routes/settings.tsx` | 설정 — 프로필, 알림, 위험 구역 | 스캐폴드 |
+| `/logout` | `app/routes/logout.tsx` | 로그아웃 (세션 파기 후 로그인으로) | 실제 |
+| `/forbidden` | `app/routes/forbidden.tsx` | 접근 거부 화면 | 실제 |
+| `*` | `app/routes/$.tsx` | 404 (없는 주소) | 실제 |
 
 인증된 화면은 공통 셸 `app/routes/_app.tsx`(사이드바 + 상단바) 안에서 렌더된다. 셸 loader가 `requireUser`로 로그인 여부를 확인하고, 미인증이면 `/login?redirectTo=...`로 리다이렉트한다.
 
@@ -99,11 +104,11 @@ pnpm typecheck   # 타입 검사
 ```
 app/
   routes/     # 라우트(화면). react-router의 loader/컴포넌트
-  features/   # 화면 단위 기능 (auth 등). 폼·검증·플로우
-  entities/   # 도메인 모델·mock·도메인 UI (item 등)
+  features/   # 화면 단위 기능. auth(로그인), task-standards(업무기준 업로드·관리), sites(현장/점검 관리) 등
+  entities/   # 도메인 모델·mock·도메인 UI. task-standard, site(실제), item(스캐폴드) 등
   shared/     # 공통 UI·유틸·설정·스토어
     ui/       # 재사용 컴포넌트 (Button, Card, Table ...)
-    lib/      # cn, format 등 유틸
+    lib/      # cn, format, supabase 클라이언트 등 유틸
     config/   # nav 등 설정
     store/    # zustand 스토어
 ```

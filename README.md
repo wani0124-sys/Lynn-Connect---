@@ -2,10 +2,12 @@
 
 건축기획팀(본사)와 현장간 중요 정보를 교환하는 사내 서비스입니다.
 
-이 저장소는 Woomi 바이브 코딩 표준 템플릿(AI 에이전트 규칙, 문서, 프롬프트, 스킬, 훅 묶음) 위에서 개발합니다.
+이 저장소는 Woomi 바이브 코딩 표준 템플릿(AI 에이전트 규칙, 문서, 프롬프트, 스킬, 훅 묶음) 위에서 개발합니다. 프로젝트 배경·핵심 기능·권한 구조 같은 실제 제품 정보는 [`AGENTS.md`의 "Lynn-Connect Project Override"](./AGENTS.md#lynn-connect-project-override) 섹션을 참고하세요.
 
-- 표준 버전: `2.3-draft`
-- 최종 수정일: 2026-07-10
+적용 중인 템플릿 기준:
+
+- 표준 버전: `2.4-draft`
+- 최종 수정일: 2026-07-13
 - 기준 레퍼런스: CTPA Hono Worker layered architecture
 - 기본 대상: React Router v7 + Hono/Cloudflare Worker + Supabase PostgreSQL 프로젝트
 
@@ -30,9 +32,7 @@ Claude Code, Codex, GitHub Copilot 전용 문서와 명령은 모두 `AGENTS.md`
 
 ---
 
-## 미리 보는 웹 스캐폴드
-
-`apps/web`에 표준 스택(React Router v7 + TanStack Query + Zustand + React Hook Form + Zod + Tailwind v4)으로 만든 **실행 가능한 관리자 SaaS 뼈대**가 들어 있습니다. 바이브 코딩을 시작하는 사용자가 화면을 먼저 눈으로 보면서 "어디에 무엇을 넣을지" 정할 수 있도록, 로그인·대시보드·목록·상세·구성원·설정과 loading/empty/error/403/404 상태를 미리 구성했습니다.
+## 실행 방법
 
 ```bash
 pnpm install
@@ -45,7 +45,19 @@ pnpm dev        # http://localhost:5173
 - 매니저: `manager@woomi.dev` / `manager1234`
 - 구성원: `member@woomi.dev` / `member1234`
 
-`/items` 상단의 세그먼트 컨트롤로 정상/로딩/빈 상태/오류를 즉시 전환하며 확인할 수 있습니다. 점선 `Placeholder` 블록과 `entities/item`의 샘플 데이터를 실제 콘텐츠·API로 교체하며 시작하세요. 자세한 화면 지도와 커스터마이즈 방법은 [`apps/web/README.md`](./apps/web/README.md)를, 제공 컴포넌트 목록은 [`.agents/ui/COMPONENTS.md`](./.agents/ui/COMPONENTS.md)를 참고하세요.
+---
+
+## 현재 화면/기능 상태
+
+`apps/web`는 React Router v7 + TanStack Query + Zustand + React Hook Form + Zod + Tailwind v4 스택 위에서 개발 중입니다.
+
+| 화면 | 상태 | 설명 |
+|---|---|---|
+| `/standards` (부서별 업무기준) | **실제 기능** | 본사 기준·공지 메일(.eml)을 업로드·파싱해 부서(2단계 계층)/구분자(색상)별로 정리하고 현장과 공유. Supabase에 저장. |
+| `/sites` (현장 점검) | **실제 기능** | 현장(공사현장) 목록과, 현장이 받는 대외 점검(관공서·감리단·발주처·자체점검 등) 이력을 점검명/결과/다음 점검 예정일/첨부파일과 함께 관리. |
+| `/` 대시보드, `/items` 항목 관리, `/members` 구성원, `/settings` 설정 | **부분 스캐폴드** | 대시보드는 부서별 업무기준·현장 점검 요약 위젯이 실제로 연결돼 있고, 나머지 KPI/최근 활동 영역은 제거했습니다. `/items`·`/members`·`/settings`는 아직 템플릿이 제공하는 도메인 중립 placeholder 화면입니다. |
+
+화면별 라우트/파일 매핑과 커스터마이즈 방법은 [`apps/web/README.md`](./apps/web/README.md)를, 제공 컴포넌트 목록은 [`.agents/ui/COMPONENTS.md`](./.agents/ui/COMPONENTS.md)를 참고하세요.
 
 ---
 
@@ -53,7 +65,7 @@ pnpm dev        # http://localhost:5173
 
 | 파일 | 역할 |
 |---|---|
-| `AGENTS.md` | 모든 에이전트가 먼저 읽는 공통 진입 규칙 |
+| `AGENTS.md` | 모든 에이전트가 먼저 읽는 공통 진입 규칙 + Lynn-Connect Project Override(실제 제품 정보) |
 | `CLAUDE.md` | Claude Code 전용 보충 규칙 |
 | `CODEX.md` | Codex 전용 보충 규칙 |
 | `.agents/ARCHITECTURE.md` | 표준 아키텍처와 레이어 경계 |
@@ -99,22 +111,25 @@ pnpm dev        # http://localhost:5173
 │   ├── prompts/
 │   └── instructions/
 ├── .githooks/
-└── .userdocs/              # 참고 문서와 설계 기록
+├── .userdocs/              # 참고 문서와 설계 기록
+├── apps/
+│   └── web/                # React Router v7 앱 (실제 서비스 코드)
+├── supabase/
+│   └── migrations/         # DB schema/RLS migration
+└── scripts/                 # 데이터 이관 등 1회성 스크립트
 ```
 
 ---
 
-## 새 프로젝트에 적용하는 방법
+## 개발 환경 설정
 
-> **비개발자라면 먼저 [`QUICKSTART.md`](./QUICKSTART.md)를 보세요.** 복사-붙여넣기 한 번으로 AI가 온보딩을 주도하는 프롬프트 2종(기존 프로젝트 적용 / 새 프로젝트 시작)이 들어 있습니다. 아래는 직접 단계를 밟고 싶은 경우의 설명입니다.
+> **비개발자라면 먼저 [`QUICKSTART.md`](./QUICKSTART.md)를 보세요.** 복사-붙여넣기 한 번으로 AI가 온보딩을 주도하는 프롬프트가 들어 있습니다.
 
-1. 이 저장소를 복사하거나 템플릿으로 새 프로젝트를 시작합니다.
-2. `AGENTS.md`의 `Project Overview`를 채웁니다.
-3. `.agents/STACK.md`에서 실제 기술스택과 다른 부분을 수정합니다.
-4. `.agents/ARCHITECTURE.md`에서 실제 앱/Worker/도메인 구조를 수정합니다.
-5. `.agents/code/*`, `.agents/ui/*` 문서를 실제 프로젝트 규칙에 맞게 조정합니다.
-6. `.agents/data/*`, `.agents/examples/*`는 실제 구현이 생기면서 채웁니다.
-7. Git hook을 사용할 경우 아래를 실행합니다.
+새로 이 저장소를 clone했다면:
+
+1. `pnpm install`로 의존성을 설치합니다.
+2. `apps/web/.env.example`을 참고해 `apps/web/.env`를 만들고 Supabase 자격증명을 채웁니다.
+3. Git hook을 사용할 경우 아래를 실행합니다.
 
 ```bash
 git config core.hooksPath .githooks
@@ -161,6 +176,8 @@ Get-Content -Raw -Encoding UTF8 .agents\WORKFLOW.md
 | Skills | 복잡 작업 체크리스트 | `.claude/skills/`, `.codex/skills/`, `.github/instructions/` |
 | Rules | 공통 규칙 | `AGENTS.md`, `.agents/` |
 | Hooks | 위험 행동 차단 | `.claude/settings.json`, `.codex/hooks.json`, `.githooks/` |
+
+`main` 브랜치 직접 push는 `.githooks/pre-push`로 차단됩니다. 저장소를 clone한 뒤 위 "개발 환경 설정"의 `git config core.hooksPath .githooks`를 실행해야 로컬에도 적용됩니다. GitHub 쪽에서 강제하려면 Settings → Branches에서 `main`에 "Require a pull request before merging" 규칙을 추가하세요.
 
 ---
 
