@@ -1,0 +1,57 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pkill -f \"react-router dev\")",
+      "Bash(supabase --version)",
+      "Bash(node -e ' *)",
+      "Bash(pnpm add *)",
+      "Bash(rm -f /tmp/cookies3.txt)",
+      "Bash(curl -s -c /tmp/cookies3.txt -X POST http://localhost:5174/login -d 'email=admin@woomi.dev&password=admin1234&redirectTo=/standards' -o /dev/null -w 'login HTTP:%{http_code}\\\\n')",
+      "Bash(curl -s -b /tmp/cookies3.txt \"http://localhost:5174/standards\" -o /tmp/standards_final.html -w \"HTTP:%{http_code}\\\\n\")",
+      "Bash(taskkill //PID 61056 //F //T)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const i=JSON.parse(require('fs').readFileSync(0,'utf8'));const p=(i.tool_input&&i.tool_input.file_path)||'';if(/(^|[\\\\/])\\.env($|\\.)|\\.pem$|secret/i.test(p)){console.error('BLOCK: 민감 파일 수정 금지: '+p);process.exit(2);}\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const i=JSON.parse(require('fs').readFileSync(0,'utf8'));const c=(i.tool_input&&i.tool_input.command)||'';if(/git\\s+push[^|&;]*\\bmain\\b/.test(c)){console.error('BLOCK: main 브랜치 직접 푸시 금지');process.exit(2);}\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const i=JSON.parse(require('fs').readFileSync(0,'utf8'));const p=(i.tool_input&&i.tool_input.file_path)||'';if(p.includes('.agents/')){console.log('REMINDER: .agents/ 문서를 변경했습니다. 관련 Command/Skill도 갱신이 필요한지 확인하세요.');}\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"try{const cp=require('child_process');const out=cp.execSync('git status --porcelain',{encoding:'utf8'});const files=out.split('\\n').filter(Boolean).map(function(l){return l.slice(3)});const rel=files.filter(function(f){return f&&f.indexOf('node_modules/')!==0&&f.indexOf('/build/')===-1&&f.indexOf('.react-router/')===-1});const others=rel.filter(function(f){return f!=='CHANGELOG.md'});if(others.length&&rel.indexOf('CHANGELOG.md')===-1){process.stdout.write(JSON.stringify({systemMessage:'REMINDER: 변경사항이 있습니다. CHANGELOG.md에 항목을 추가하고 AGENTS.md/README.md의 표준 버전·최종 수정일을 갱신하세요. (AGENTS.md 10장)'}))}}catch(e){}\""
+          }
+        ]
+      }
+    ]
+  }
+}
