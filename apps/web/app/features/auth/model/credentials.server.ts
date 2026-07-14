@@ -24,3 +24,16 @@ export function verifyCredentials(email: string, password: string): string | nul
   if (!expected || expected !== password) return null
   return member.id
 }
+
+// 멤버 관리에서 계정을 생성/재발급할 때 서버가 강제로 부여하는 임시 비밀번호를 저장한다.
+export function setPassword(email: string, password: string): void {
+  DEMO_PASSWORDS[email.trim().toLowerCase()] = password
+}
+
+// 계정 생성/일괄 생성 시 이메일을 아이디로, 이 값을 초기 비밀번호로 강제 부여한다.
+// 최초 로그인 후 본인이 반드시 변경해야 한다(mustChangePassword).
+export const DEFAULT_TEMP_PASSWORD = "Woomilynn"
+
+export function generateTempPassword(): string {
+  return DEFAULT_TEMP_PASSWORD
+}

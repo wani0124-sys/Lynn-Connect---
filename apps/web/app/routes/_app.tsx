@@ -1,9 +1,9 @@
-import { Form, Link, NavLink, Outlet, useLoaderData, type LoaderFunctionArgs } from "react-router"
+import { Form, Link, NavLink, Outlet, redirect, useLoaderData, type LoaderFunctionArgs } from "react-router"
 import { Bell, LogOut, Menu, PanelLeft, PanelLeftClose, Waypoints } from "lucide-react"
 import { MEMBER_ROLE_LABEL } from "~/entities/member/model/member"
 import { requireUser } from "~/features/auth/model/session.server"
 import { cn } from "~/shared/lib/cn"
-import { navItems } from "~/shared/config/nav"
+import { navItems, secondaryNavItems, type NavItem } from "~/shared/config/nav"
 import { useUiLayoutStore } from "~/shared/store/ui-layout.store"
 import { Badge } from "~/shared/ui/badge"
 import { Button } from "~/shared/ui/button"
@@ -11,6 +11,7 @@ import { Input } from "~/shared/ui/input"
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireUser(request)
+  if (user.mustChangePassword) throw redirect("/change-password")
   return { user }
 }
 
@@ -35,10 +36,20 @@ function Brand({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: ()
   )
 }
 
-function NavList({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
+function NavList({
+  items,
+  collapsed,
+  onNavigate,
+  className,
+}: {
+  items: NavItem[]
+  collapsed?: boolean
+  onNavigate?: () => void
+  className?: string
+}) {
   return (
-    <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
-      {navItems.map((item) => {
+    <nav className={cn("flex flex-col gap-1 p-2", className)}>
+      {items.map((item) => {
         const Icon = item.icon
         return (
           <NavLink
@@ -82,7 +93,8 @@ export default function AppLayout() {
         )}
       >
         <Brand collapsed={sidebarCollapsed} />
-        <NavList collapsed={sidebarCollapsed} />
+        <NavList items={navItems} collapsed={sidebarCollapsed} className="flex-1 overflow-y-auto" />
+        <NavList items={secondaryNavItems} collapsed={sidebarCollapsed} className="border-t border-primary-foreground/10" />
         <div className="border-t border-primary-foreground/10 p-2">
           <Button
             variant="ghost"
@@ -106,7 +118,12 @@ export default function AppLayout() {
           />
           <div className="absolute inset-y-0 left-0 flex w-64 flex-col bg-primary text-primary-foreground shadow-lg">
             <Brand onNavigate={() => setMobileNavOpen(false)} />
-            <NavList onNavigate={() => setMobileNavOpen(false)} />
+            <NavList items={navItems} onNavigate={() => setMobileNavOpen(false)} className="flex-1 overflow-y-auto" />
+            <NavList
+              items={secondaryNavItems}
+              onNavigate={() => setMobileNavOpen(false)}
+              className="border-t border-primary-foreground/10"
+            />
           </div>
         </div>
       ) : null}

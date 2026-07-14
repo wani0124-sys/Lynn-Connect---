@@ -1,4 +1,4 @@
-import { ClipboardCheck, ClipboardList, FileText, Package, Settings, Users } from "lucide-react"
+import { ClipboardCheck, ClipboardList, FileText, Settings, Users } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 export interface NavItem {
@@ -13,7 +13,10 @@ export const navItems: NavItem[] = [
   { to: "/standards", label: "부서별 업무기준 (메일공지)", icon: ClipboardList },
   { to: "/sites", label: "현장 점검", icon: ClipboardCheck },
   { to: "/documents", label: "문서 관리", icon: FileText },
-  { to: "/items", label: "항목 관리", icon: Package },
-  { to: "/members", label: "구성원", icon: Users },
+]
+
+// 사이드바 하단에 별도로 배치하는 관리성 메뉴.
+export const secondaryNavItems: NavItem[] = [
+  { to: "/members", label: "멤버 관리", icon: Users },
   { to: "/settings", label: "설정", icon: Settings },
 ]

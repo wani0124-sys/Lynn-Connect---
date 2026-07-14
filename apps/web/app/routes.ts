@@ -3,6 +3,7 @@ import { type RouteConfig, index, layout, route } from "@react-router/dev/routes
 export default [
   route("login", "routes/login.tsx"),
   route("logout", "routes/logout.tsx"),
+  route("change-password", "routes/change-password.tsx"),
   layout("routes/_app.tsx", [
     index("routes/dashboard.tsx"),
     route("standards", "routes/standards.tsx"),
@@ -12,8 +13,6 @@ export default [
     route("sites/:siteId", "routes/site-detail.tsx"),
     route("documents", "routes/documents.tsx"),
     route("documents/:seriesId", "routes/document-detail.tsx"),
-    route("items", "routes/items.tsx"),
-    route("items/:itemId", "routes/item-detail.tsx"),
     route("members", "routes/members.tsx"),
     route("settings", "routes/settings.tsx"),
   ]),
