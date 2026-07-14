@@ -10,6 +10,8 @@ export default [
     route("standards/:postId", "routes/standards-detail.tsx"),
     route("sites", "routes/sites.tsx"),
     route("sites/:siteId", "routes/site-detail.tsx"),
+    route("documents", "routes/documents.tsx"),
+    route("documents/:seriesId", "routes/document-detail.tsx"),
     route("items", "routes/items.tsx"),
     route("items/:itemId", "routes/item-detail.tsx"),
     route("members", "routes/members.tsx"),
