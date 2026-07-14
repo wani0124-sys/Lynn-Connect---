@@ -13,13 +13,13 @@
   --color-muted-foreground: #6b7280;
   --color-border: #e5e7eb;
   --color-input: #e5e7eb;
-  --color-ring: #2f6fed;
-  --color-primary: #2f6fed;
+  --color-ring: #0a3d62;
+  --color-primary: #0a3d62;
   --color-primary-foreground: #ffffff;
   --color-secondary: #f0f2f5;
   --color-secondary-foreground: #1a1f3a;
   --color-accent: #e3ecfe;
-  --color-accent-foreground: #2f6fed;
+  --color-accent-foreground: #0a3d62;
   --color-success: #1fa864;
   --color-success-foreground: #ffffff;
   --color-warning: #f59e0b;

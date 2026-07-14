@@ -8,8 +8,9 @@ import {
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from "react-router"
-import { Check, Download, Paperclip, Pencil, Trash2, Upload, X } from "lucide-react"
+import { Check, Download, ExternalLink, Paperclip, Pencil, Trash2, Upload, X } from "lucide-react"
 import { buildDepartmentOptions } from "~/entities/task-standard/lib/build-department-options"
+import { CategoryBadge } from "~/entities/task-standard/ui/category-badge"
 import { isHeadquarters } from "~/entities/member/model/member"
 import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
 import {
@@ -33,7 +34,6 @@ import { Button } from "~/shared/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "~/shared/ui/card"
 import { ConfirmPanel } from "~/shared/ui/confirm-panel"
 import { EmptyState } from "~/shared/ui/empty-state"
-import { Field } from "~/shared/ui/field"
 import { Input } from "~/shared/ui/input"
 import { Select } from "~/shared/ui/select"
 
@@ -120,11 +120,19 @@ export default function StandardsDetailRoute() {
   const [titleDraft, setTitleDraft] = useState(post?.title ?? "")
   const [editingAttachmentId, setEditingAttachmentId] = useState<string | null>(null)
   const [attachmentFilenameDraft, setAttachmentFilenameDraft] = useState("")
+  const [isEditingClassification, setIsEditingClassification] = useState(false)
+  const [departmentDraft, setDepartmentDraft] = useState(String(post?.departmentId ?? ""))
+  const [categoryDraft, setCategoryDraft] = useState(String(post?.categoryId ?? ""))
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setTitleDraft(post?.title ?? "")
   }, [post?.title])
+
+  useEffect(() => {
+    setDepartmentDraft(String(post?.departmentId ?? ""))
+    setCategoryDraft(String(post?.categoryId ?? ""))
+  }, [post?.departmentId, post?.categoryId])
 
   if (!post) {
     return (
@@ -144,6 +152,8 @@ export default function StandardsDetailRoute() {
 
   const departmentOptions = buildDepartmentOptions(departments)
   const sortedCategories = [...categories].sort((a, b) => a.sortOrder - b.sortOrder)
+  const currentDepartment = post.departmentId ? (departments.find((d) => d.id === post.departmentId) ?? null) : null
+  const currentCategory = post.categoryId ? (categories.find((c) => c.id === post.categoryId) ?? null) : null
   const actionError =
     (metaFetcher.data && "error" in metaFetcher.data && metaFetcher.data.error) ||
     (attachmentFetcher.data && "error" in attachmentFetcher.data && attachmentFetcher.data.error) ||
@@ -193,10 +203,27 @@ export default function StandardsDetailRoute() {
     setEditingAttachmentId(null)
   }
 
+  const cancelClassificationEdit = () => {
+    setDepartmentDraft(String(post.departmentId ?? ""))
+    setCategoryDraft(String(post.categoryId ?? ""))
+    setIsEditingClassification(false)
+  }
+
+  const saveClassificationEdit = () => {
+    const currentDeptValue = String(post.departmentId ?? "")
+    const currentCatValue = String(post.categoryId ?? "")
+    if (departmentDraft === currentDeptValue && categoryDraft === currentCatValue) {
+      cancelClassificationEdit()
+      return
+    }
+    metaFetcher.submit({ intent: "meta.update", departmentId: departmentDraft, categoryId: categoryDraft }, { method: "post" })
+    setIsEditingClassification(false)
+  }
+
   return (
     <div className="space-y-6">
       <Link to="/standards" className="text-sm text-muted-foreground hover:text-foreground">
-        ← 부서별 업무기준
+        <span className="font-semibold text-foreground">[목록]</span> 부서별 업무기준 (메일공지)
       </Link>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -259,59 +286,74 @@ export default function StandardsDetailRoute() {
         />
       ) : null}
 
-      {canManage ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>분류</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-4">
-            <Field label="부서" htmlFor="departmentId">
-              <Select
-                id="departmentId"
-                defaultValue={post.departmentId ?? ""}
-                disabled={metaFetcher.state !== "idle"}
-                onChange={(e) =>
-                  metaFetcher.submit(
-                    { intent: "meta.update", departmentId: e.target.value, categoryId: String(post.categoryId ?? "") },
-                    { method: "post" },
-                  )
-                }
-              >
-                <option value="">부서 없음</option>
-                {departmentOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="구분자" htmlFor="categoryId">
-              <Select
-                id="categoryId"
-                defaultValue={post.categoryId ?? ""}
-                disabled={metaFetcher.state !== "idle"}
-                onChange={(e) =>
-                  metaFetcher.submit(
-                    { intent: "meta.update", departmentId: String(post.departmentId ?? ""), categoryId: e.target.value },
-                    { method: "post" },
-                  )
-                }
-              >
-                <option value="">구분자 없음</option>
-                {sortedCategories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </CardContent>
-        </Card>
-      ) : null}
-
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between gap-4">
           <CardTitle>본문</CardTitle>
+          {canManage ? (
+            isEditingClassification ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={departmentDraft}
+                  disabled={metaFetcher.state !== "idle"}
+                  onChange={(e) => setDepartmentDraft(e.target.value)}
+                  className="h-8 text-xs"
+                  aria-label="부서"
+                >
+                  <option value="">부서 없음</option>
+                  {departmentOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  value={categoryDraft}
+                  disabled={metaFetcher.state !== "idle"}
+                  onChange={(e) => setCategoryDraft(e.target.value)}
+                  className="h-8 text-xs"
+                  aria-label="구분자"
+                >
+                  <option value="">구분자 없음</option>
+                  {sortedCategories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </Select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="저장"
+                  disabled={metaFetcher.state !== "idle"}
+                  onClick={saveClassificationEdit}
+                >
+                  <Check className="size-4" aria-hidden />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" aria-label="취소" onClick={cancelClassificationEdit}>
+                  <X className="size-4" aria-hidden />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">{currentDepartment?.name ?? "부서 없음"}</span>
+                {currentCategory ? (
+                  <CategoryBadge name={currentCategory.name} color={currentCategory.color} />
+                ) : (
+                  <span className="text-sm text-muted-foreground">구분자 없음</span>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="분류 수정"
+                  onClick={() => setIsEditingClassification(true)}
+                >
+                  <Pencil className="size-4" aria-hidden />
+                </Button>
+              </div>
+            )
+          ) : null}
         </CardHeader>
         <CardContent>
           {post.bodyHtml ? (
@@ -367,6 +409,16 @@ export default function StandardsDetailRoute() {
                         <X className="size-4" aria-hidden />
                       </Button>
                     </div>
+                  ) : attachmentUrls[att.id] ? (
+                    <a
+                      href={attachmentUrls[att.id]}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex min-w-0 items-center gap-2 truncate text-sm hover:underline"
+                    >
+                      <Paperclip className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                      {att.filename}
+                    </a>
                   ) : (
                     <span className="flex items-center gap-2 truncate text-sm">
                       <Paperclip className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -376,6 +428,13 @@ export default function StandardsDetailRoute() {
                   <div className="flex items-center gap-1">
                     {editingAttachmentId === att.id ? null : (
                       <>
+                        {attachmentUrls[att.id] ? (
+                          <a href={attachmentUrls[att.id]} target="_blank" rel="noopener noreferrer">
+                            <Button type="button" variant="ghost" size="icon" aria-label="바로 열기">
+                              <ExternalLink className="size-4" aria-hidden />
+                            </Button>
+                          </a>
+                        ) : null}
                         {attachmentUrls[att.id] ? (
                           <a href={attachmentUrls[att.id]} download={att.filename}>
                             <Button type="button" variant="ghost" size="icon" aria-label="다운로드">

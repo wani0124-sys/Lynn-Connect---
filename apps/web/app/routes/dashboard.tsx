@@ -135,7 +135,7 @@ function StandardsHighlightBanner({
   return (
     <Card className="overflow-hidden">
       <CardHeader className="flex-row items-center justify-between border-b border-border bg-accent pb-5">
-        <CardTitle>부서별 업무기준</CardTitle>
+        <CardTitle>부서별 업무기준 (메일공지)</CardTitle>
         <Link to="/standards" className="text-sm font-medium text-primary hover:underline">
           전체 보기
         </Link>

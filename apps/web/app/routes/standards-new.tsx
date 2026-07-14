@@ -126,7 +126,7 @@ export default function StandardsNewRoute() {
   return (
     <div className="space-y-6">
       <Link to="/standards" className="text-sm text-muted-foreground hover:text-foreground">
-        ← 부서별 업무기준
+        <span className="font-semibold text-foreground">[목록]</span> 부서별 업무기준 (메일공지)
       </Link>
 
       <PageHeader title="EML 업로드" description="본사 기준·공지 메일(.eml)을 여러 건 한 번에 업로드합니다 (최대 30개)" />

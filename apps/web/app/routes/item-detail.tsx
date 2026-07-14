@@ -47,7 +47,7 @@ export default function ItemDetailRoute() {
   return (
     <div className="space-y-6">
       <Link to="/items" className="text-sm text-muted-foreground hover:text-foreground">
-        ← 항목 목록
+        <span className="font-semibold text-foreground">[목록]</span> 항목 관리
       </Link>
 
       <div className="space-y-3">

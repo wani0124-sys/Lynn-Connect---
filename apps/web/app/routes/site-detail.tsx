@@ -139,7 +139,7 @@ export default function SiteDetailRoute() {
   return (
     <div className="space-y-6">
       <Link to="/sites" className="text-sm text-muted-foreground hover:text-foreground">
-        ← 현장 점검
+        <span className="font-semibold text-foreground">[목록]</span> 현장 점검
       </Link>
 
       <PageHeader

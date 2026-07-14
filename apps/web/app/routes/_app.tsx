@@ -1,6 +1,5 @@
-import { useState } from "react"
-import { Form, NavLink, Outlet, useLoaderData, type LoaderFunctionArgs } from "react-router"
-import { Bell, Boxes, LogOut, Menu, PanelLeft, PanelLeftClose, X } from "lucide-react"
+import { Form, Link, NavLink, Outlet, useLoaderData, type LoaderFunctionArgs } from "react-router"
+import { Bell, LogOut, Menu, PanelLeft, PanelLeftClose, Waypoints } from "lucide-react"
 import { MEMBER_ROLE_LABEL } from "~/entities/member/model/member"
 import { requireUser } from "~/features/auth/model/session.server"
 import { cn } from "~/shared/lib/cn"
@@ -15,14 +14,24 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return { user }
 }
 
-function Brand({ collapsed }: { collapsed?: boolean }) {
+function Brand({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
   return (
-    <div className="flex h-14 items-center gap-2 border-b border-primary-foreground/10 px-3">
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary-foreground text-primary">
-        <Boxes className="size-5" aria-hidden />
+    <Link
+      to="/"
+      onClick={onNavigate}
+      title="대시보드로 이동"
+      className="flex items-center gap-2.5 border-b border-primary-foreground/10 px-3 py-3 transition-colors hover:bg-primary-foreground/10"
+    >
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-foreground text-primary">
+        <Waypoints className="size-5" aria-hidden />
       </div>
-      {!collapsed ? <span className="truncate text-sm font-semibold text-primary-foreground">Lynn-Connect</span> : null}
-    </div>
+      {!collapsed ? (
+        <span className="flex min-w-0 flex-col leading-tight">
+          <span className="truncate text-lg font-bold tracking-tight text-primary-foreground">Lynn-Connect</span>
+          <span className="truncate text-xs text-primary-foreground/60">(린-커넥트)</span>
+        </span>
+      ) : null}
+    </Link>
   )
 }
 
@@ -63,13 +72,12 @@ export default function AppLayout() {
   const toggleSidebar = useUiLayoutStore((state) => state.toggleSidebar)
   const mobileNavOpen = useUiLayoutStore((state) => state.mobileNavOpen)
   const setMobileNavOpen = useUiLayoutStore((state) => state.setMobileNavOpen)
-  const [bannerOpen, setBannerOpen] = useState(true)
 
   return (
     <div className="flex min-h-dvh">
       <aside
         className={cn(
-          "hidden shrink-0 flex-col border-r border-[#0a3d62] bg-[#0a3d62] text-primary-foreground md:flex",
+          "hidden shrink-0 flex-col border-r border-primary bg-primary text-primary-foreground md:flex",
           sidebarCollapsed ? "w-16" : "w-60",
         )}
       >
@@ -96,8 +104,8 @@ export default function AppLayout() {
             onClick={() => setMobileNavOpen(false)}
             aria-hidden
           />
-          <div className="absolute inset-y-0 left-0 flex w-64 flex-col bg-[#0a3d62] text-primary-foreground shadow-lg">
-            <Brand />
+          <div className="absolute inset-y-0 left-0 flex w-64 flex-col bg-primary text-primary-foreground shadow-lg">
+            <Brand onNavigate={() => setMobileNavOpen(false)} />
             <NavList onNavigate={() => setMobileNavOpen(false)} />
           </div>
         </div>
@@ -145,20 +153,6 @@ export default function AppLayout() {
         </header>
 
         <main className="flex-1">
-          {bannerOpen ? (
-            <div className="flex items-center justify-between gap-3 bg-accent px-4 py-2 text-sm text-accent-foreground sm:px-6">
-              <p>이 화면은 스캐폴드입니다. 점선 가이드 영역과 샘플 데이터를 실제 콘텐츠로 교체하세요.</p>
-              <button
-                type="button"
-                onClick={() => setBannerOpen(false)}
-                aria-label="안내 닫기"
-                className="shrink-0 rounded-md p-1 transition-colors hover:bg-accent-foreground/10"
-              >
-                <X className="size-4" aria-hidden />
-              </button>
-            </div>
-          ) : null}
-
           <div className="mx-auto w-full max-w-6xl p-4 sm:p-6">
             <Outlet />
           </div>

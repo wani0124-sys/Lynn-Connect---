@@ -218,7 +218,7 @@ export default function StandardsRoute() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="부서별 업무기준"
+        title="부서별 업무기준 (메일공지)"
         description="본사 기준·공지 메일을 부서/구분자별로 정리해 공유합니다"
         actions={
           canManage ? (
