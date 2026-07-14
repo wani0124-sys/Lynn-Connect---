@@ -69,9 +69,11 @@ function toInspection(row: InspectionRow, attachments: AttachmentRow[]): SiteIns
   }
 }
 
-// 파일명을 storage 경로에 안전하게 쓰기 위해 경로 구분자만 제거한다(원본 파일명은 filename 컬럼에 그대로 보존).
-function sanitizeFilename(filename: string): string {
-  return filename.replace(/[/\\]/g, "_")
+// Supabase Storage 객체 키에 원본 파일명(한글/공백/특수문자)을 그대로 쓰면 "Invalid key" 오류가 나는
+// 경우가 있어, storage_path에는 확장자만 남기고 원본 파일명은 filename 컬럼에만 보존한다.
+function getFileExtension(filename: string): string {
+  const match = filename.match(/\.[a-zA-Z0-9]+$/)
+  return match ? match[0] : ""
 }
 
 // ── 현장 ─────────────────────────────────────────────────────
@@ -258,7 +260,7 @@ export async function createInspection(input: CreateInspectionInput): Promise<Si
 
   for (const att of input.attachments) {
     const attachmentId = randomUUID()
-    const storagePath = `inspections/${inspectionId}/${attachmentId}-${sanitizeFilename(att.filename)}`
+    const storagePath = `inspections/${inspectionId}/${attachmentId}${getFileExtension(att.filename)}`
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
       .upload(storagePath, att.content, { contentType: att.mimeType ?? undefined, upsert: false })
@@ -321,7 +323,7 @@ export async function addInspectionAttachment(
 ): Promise<SiteInspectionAttachment> {
   const supabase = getSupabaseServerClient()
   const attachmentId = randomUUID()
-  const storagePath = `inspections/${inspectionId}/${attachmentId}-${sanitizeFilename(file.filename)}`
+  const storagePath = `inspections/${inspectionId}/${attachmentId}${getFileExtension(file.filename)}`
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)

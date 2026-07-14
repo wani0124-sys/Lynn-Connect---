@@ -111,6 +111,7 @@ export default function SiteDetailRoute() {
   const deleteFetcher = useFetcher<typeof action>()
   const [formOpen, setFormOpen] = useState(false)
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
+  const [showAllInspections, setShowAllInspections] = useState(false)
 
   if (!site) {
     return (
@@ -133,6 +134,7 @@ export default function SiteDetailRoute() {
   }
 
   const actionError = actionFetcher.data && "error" in actionFetcher.data ? actionFetcher.data.error : null
+  const visibleInspections = showAllInspections ? inspections : inspections.slice(0, 1)
 
   return (
     <div className="space-y-6">
@@ -156,15 +158,24 @@ export default function SiteDetailRoute() {
       {actionError ? <div className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{actionError}</div> : null}
 
       <Card>
-        <CardHeader>
-          <CardTitle>점검 이력</CardTitle>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle>{showAllInspections ? "점검 이력" : "최신 점검"}</CardTitle>
+          {inspections.length > 1 ? (
+            <button
+              type="button"
+              onClick={() => setShowAllInspections((prev) => !prev)}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              {showAllInspections ? "최신 점검만 보기" : `전체 이력 보기 (${inspections.length}건)`}
+            </button>
+          ) : null}
         </CardHeader>
         <CardContent>
           {inspections.length === 0 ? (
             <EmptyState title="점검 기록이 없습니다" description="이 현장이 받은 대외 점검 기록을 추가해 보세요." />
           ) : (
             <ul className="divide-y divide-border">
-              {inspections.map((insp) => (
+              {visibleInspections.map((insp) => (
                 <li key={insp.id} className="py-4 first:pt-0 last:pb-0">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0 space-y-1">

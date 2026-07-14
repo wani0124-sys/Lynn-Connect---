@@ -85,9 +85,11 @@ function toPost(row: PostRow, attachments: AttachmentRow[]): StandardPost {
   }
 }
 
-// 파일명을 storage 경로에 안전하게 쓰기 위해 경로 구분자만 제거한다(원본 파일명은 filename 컬럼에 그대로 보존).
-function sanitizeFilename(filename: string): string {
-  return filename.replace(/[/\\]/g, "_")
+// Supabase Storage 객체 키에 원본 파일명(한글/공백/특수문자)을 그대로 쓰면 "Invalid key" 오류가 나는
+// 경우가 있어, storage_path에는 확장자만 남기고 원본 파일명은 filename 컬럼에만 보존한다.
+function getFileExtension(filename: string): string {
+  const match = filename.match(/\.[a-zA-Z0-9]+$/)
+  return match ? match[0] : ""
 }
 
 // PostgREST .or() 필터 문법에서 콤마는 조건 구분자이므로 사용자 입력에 포함되면 이스케이프한다.
@@ -414,7 +416,7 @@ export async function insertPost(input: InsertPostInput): Promise<StandardPost> 
 
   for (const att of input.parsed.attachments) {
     const attachmentId = randomUUID()
-    const storagePath = `posts/${postId}/${attachmentId}-${sanitizeFilename(att.filename)}`
+    const storagePath = `posts/${postId}/${attachmentId}${getFileExtension(att.filename)}`
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
       .upload(storagePath, att.content, { contentType: att.mimeType ?? undefined, upsert: false })
@@ -525,7 +527,7 @@ export async function addAttachment(
 ): Promise<StandardAttachment> {
   const supabase = getSupabaseServerClient()
   const attachmentId = randomUUID()
-  const storagePath = `posts/${postId}/${attachmentId}-${sanitizeFilename(file.filename)}`
+  const storagePath = `posts/${postId}/${attachmentId}${getFileExtension(file.filename)}`
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
