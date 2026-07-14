@@ -392,4 +392,57 @@ Migration file: supabase/migrations/20260713090000_site_inspections.sql
 Notes:
   - Storage 버킷 site-inspections는 task-standards와 동일하게 private(public=false)이며 서버가 service role key로만 업로드하고 다운로드는 signed URL(TTL 300초)로 발급한다.
   - 이 migration은 작성 시점(2026-07-13) 기준 실제 Supabase 프로젝트에 아직 적용되지 않았다 — 적용 전에는 /sites 관련 화면이 "Could not find the table" 오류로 500을 반환한다.
+
+Schema: public
+Table: document_series
+Purpose: 반복 개정되는 회사 표준 문서(예: "현장 주요 업무 체크리스트")의 시리즈. 시리즈 하나가 여러 리비전(document_revisions)을 갖는다.
+Columns:
+  id bigint (identity)
+  name text
+  description text (nullable)
+  sort_order int
+  created_at timestamptz
+  updated_at timestamptz
+Primary key: id
+Foreign keys: 없음
+Indexes: 없음(테이블 크기가 작아 근거 부족, monitoring candidate)
+Unique constraints: document_series_name_key (name)
+RLS policies: RLS enabled. document_series_no_direct_access(전체 거부, anon/authenticated) — service role로만 접근.
+RPC/functions: 없음
+Related APIs: apps/web/app/routes/documents.tsx (loader/action, intent=series.*) — apps/web/app/features/documents/model/documents.repository.server.ts를 직접 호출
+Related frontend screens: /documents (문서 카드 목록 + 문서 관리 모달)
+Migration file: supabase/migrations/20260713100000_document_revisions.sql
+Notes: 시리즈 삭제 시 document_revisions는 on delete cascade로 함께 삭제되며, 삭제 전 앱 코드(deleteSeries)에서 첨부 storage 객체를 먼저 정리한다.
+
+Schema: public
+Table: document_revisions
+Purpose: 문서 시리즈의 리비전(Rev.0, Rev.1, ...) 이력. 업로드된 PDF에서 추출한 텍스트와, 직전 리비전 대비 줄 단위 diff 결과를 함께 저장한다.
+Columns:
+  id uuid
+  series_id bigint (FK, on delete cascade)
+  revision_label text        -- "Rev.0", "Rev.1" 등 자유 텍스트, series_id+revision_label 유니크
+  effective_date date (nullable)   -- 시행일자
+  filename text
+  storage_path text
+  mime_type text
+  extracted_text text (nullable)   -- pdf-parse로 추출한 전체 텍스트. diff 재계산의 기준(다음 리비전 업로드 시 조회)
+  diff_json jsonb (nullable)       -- 직전 리비전 대비 diff 결과([{type: added|removed|unchanged, value}, ...]). 최초 리비전은 null
+  uploaded_by text
+  created_at timestamptz
+Primary key: id
+Foreign keys: series_id -> document_series(id) on delete cascade
+Indexes: document_revisions_series_id_idx, document_revisions_created_at_idx (created_at desc)
+Unique constraints: document_revisions_series_label_key (series_id, revision_label)
+RLS policies: RLS enabled. document_revisions_no_direct_access(전체 거부, anon/authenticated).
+RPC/functions: 없음
+Related APIs: apps/web/app/routes/document-detail.tsx (loader: listRevisions, action: intent=revision.create/revision.delete) — apps/web/app/features/documents/model/documents.parser.server.ts(extractPdfText/computeLineDiff)를 통해 diff를 계산한다.
+Related frontend screens: /documents/:seriesId (리비전 이력 목록, 새 리비전 업로드 모달, 리비전별 diff 펼쳐보기)
+Migration file: supabase/migrations/20260713100000_document_revisions.sql
+Notes:
+  - diff는 PDF 표(셀) 구조가 아니라 추출된 순수 텍스트를 줄 단위로 비교한 결과다 — PDF마다 표 렌더링 구조가 달라 셀 단위 정밀 diff는 범위에서 제외했다(사용자 확인 후 결정, 2026-07-13).
+  - 쓰기(시리즈 생성, 리비전 업로드·삭제)는 본사(admin/manager, requireHeadquarters) 전용이다. 현장(member) 계정은 조회만 가능하다 — site_inspections와 달리 현장별 소유 개념이 없다.
+  - 수정(edit) API는 없다 — 잘못 업로드한 리비전은 삭제 후 재업로드한다.
+  - Storage 버킷 document-revisions는 private(public=false)이며 서버가 service role key로만 업로드하고 다운로드는 signed URL(TTL 300초)로 발급한다.
+  - extracted_text는 리비전마다 원문 전체를 저장하므로 문서가 많아지면 테이블 크기가 커질 수 있다(monitoring candidate). 필요 시 오래된 리비전의 extracted_text를 null로 비우고 diff_json만 남기는 정리 정책을 고려한다.
+  - 이 migration은 작성 시점(2026-07-13) 기준 실제 Supabase 프로젝트에 아직 적용되지 않았다 — 적용 전에는 /documents 관련 화면이 "Could not find the table" 오류로 500을 반환한다.
 ```

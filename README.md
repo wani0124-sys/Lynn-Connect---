@@ -6,7 +6,7 @@
 
 적용 중인 템플릿 기준:
 
-- 표준 버전: `2.4-draft`
+- 표준 버전: `2.5-draft`
 - 최종 수정일: 2026-07-13
 - 기준 레퍼런스: CTPA Hono Worker layered architecture
 - 기본 대상: React Router v7 + Hono/Cloudflare Worker + Supabase PostgreSQL 프로젝트
@@ -55,6 +55,7 @@ pnpm dev        # http://localhost:5173
 |---|---|---|
 | `/standards` (부서별 업무기준) | **실제 기능** | 본사 기준·공지 메일(.eml)을 업로드·파싱해 부서(2단계 계층)/구분자(색상)별로 정리하고 현장과 공유. Supabase에 저장. |
 | `/sites` (현장 점검) | **실제 기능** | 현장(공사현장) 목록과, 현장이 받는 대외 점검(관공서·감리단·발주처·자체점검 등) 이력을 점검명/결과/다음 점검 예정일/첨부파일과 함께 관리. |
+| `/documents` (문서 관리) | **실제 기능** | 반복 개정되는 회사 표준 PDF 문서(체크리스트 등)를 리비전 단위로 관리하고, 새 리비전 업로드 시 직전 리비전과 텍스트 줄 단위 diff를 자동 계산해 보여줌. |
 | `/` 대시보드, `/items` 항목 관리, `/members` 구성원, `/settings` 설정 | **부분 스캐폴드** | 대시보드는 부서별 업무기준·현장 점검 요약 위젯이 실제로 연결돼 있고, 나머지 KPI/최근 활동 영역은 제거했습니다. `/items`·`/members`·`/settings`는 아직 템플릿이 제공하는 도메인 중립 placeholder 화면입니다. |
 
 화면별 라우트/파일 매핑과 커스터마이즈 방법은 [`apps/web/README.md`](./apps/web/README.md)를, 제공 컴포넌트 목록은 [`.agents/ui/COMPONENTS.md`](./.agents/ui/COMPONENTS.md)를 참고하세요.

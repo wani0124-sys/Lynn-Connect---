@@ -1,6 +1,6 @@
 # Lynn-Connect web
 
-React Router v7 기반 Lynn-Connect(본사 ↔ 현장 정보 공유 플랫폼) 앱이다. Woomi 관리자 SaaS 템플릿에서 시작했으며, `/standards`(부서별 업무기준)와 `/sites`(현장 점검)는 실제 구현된 기능이고 나머지 화면(항목 관리/구성원/설정)은 아직 템플릿이 제공하는 도메인 중립 placeholder다. 실제 도메인에 맞게 순차적으로 교체한다.
+React Router v7 기반 Lynn-Connect(본사 ↔ 현장 정보 공유 플랫폼) 앱이다. Woomi 관리자 SaaS 템플릿에서 시작했으며, `/standards`(부서별 업무기준)·`/sites`(현장 점검)·`/documents`(문서 리비전 관리)는 실제 구현된 기능이고 나머지 화면(항목 관리/구성원/설정)은 아직 템플릿이 제공하는 도메인 중립 placeholder다. 실제 도메인에 맞게 순차적으로 교체한다.
 
 ---
 
@@ -48,6 +48,8 @@ pnpm typecheck   # 타입 검사
 | `/standards/:postId` | `app/routes/standards-detail.tsx` | 업무기준 상세 — 본문, 첨부파일, 제목/부서/구분자 수정 | 실제 |
 | `/sites` | `app/routes/sites.tsx` | 현장 목록 — 현장별 최근 점검 결과 카드, 현장 관리(추가·수정·삭제·순서) | 실제 |
 | `/sites/:siteId` | `app/routes/site-detail.tsx` | 현장 상세 — 대외 점검 이력(점검기관/결과/다음 점검 예정일/첨부) 등록·조회·삭제 | 실제 |
+| `/documents` | `app/routes/documents.tsx` | 문서 목록 — 시리즈별 최신 리비전 카드, 문서 관리(추가·수정·삭제·순서) | 실제 |
+| `/documents/:seriesId` | `app/routes/document-detail.tsx` | 문서 상세 — 리비전 이력, 새 리비전 업로드, 직전 리비전과의 텍스트 diff | 실제 |
 | `/items` | `app/routes/items.tsx` | 항목 목록 — 검색·필터, 상태 미리보기 | 스캐폴드 |
 | `/items/:itemId` | `app/routes/item-detail.tsx` | 항목 상세 — 정보와 삭제 확인 | 스캐폴드 |
 | `/members` | `app/routes/members.tsx` | 구성원 — 역할·권한 관리 | 스캐폴드 |

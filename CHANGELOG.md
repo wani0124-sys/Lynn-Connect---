@@ -8,6 +8,21 @@
 
 ---
 
+## [2.5-draft] - 2026-07-13
+
+### 추가
+- **문서 리비전 관리** (`/documents`, `/documents/:seriesId`) — "현장 주요 업무 체크리스트"처럼 반복 개정되며 현장에 공지하는 PDF 문서를 시리즈(문서명)·리비전(Rev.0, Rev.1, ...) 단위로 관리한다. 새 리비전을 업로드하면 PDF에서 텍스트를 추출(`pdf-parse`)해 직전 리비전과 줄 단위 diff(`diff` 패키지, `diffLines`)를 자동 계산·저장하고, 상세 화면에서 추가·삭제된 줄을 색으로 구분해 펼쳐볼 수 있다. `entities/document`, `features/documents`로 구성.
+- DB: `document_series`/`document_revisions` 테이블과 `document-revisions` storage 버킷 (`supabase/migrations/20260713100000_document_revisions.sql`). **주의**: 이 migration도 아직 실제 Supabase 프로젝트에 적용되지 않았다 — Supabase SQL Editor에서 직접 실행해야 `/documents` 화면이 정상 동작한다.
+- 신규 의존성: `pdf-parse`(PDF 텍스트 추출, pdfjs-dist 기반), `diff`(텍스트 diff).
+- 사이드바 네비게이션에 "문서 관리" 메뉴 추가.
+
+### 알려진 제약
+- diff는 PDF에서 추출한 순수 텍스트를 줄 단위로 비교하는 방식이다. 표(셀) 구조까지 인식해 "이 항목의 이 컬럼만 바뀌었다"는 식으로 정밀하게 비교하지는 못한다 — PDF마다 표 렌더링 구조가 달라 셀 단위 파싱은 안정적으로 만들기 어렵다고 판단해 범위에서 제외했다(사용자 확인 후 진행).
+- 리비전 수정(edit) API는 없다. 잘못 업로드한 리비전은 삭제 후 재업로드한다.
+- 문서 시리즈 생성·리비전 업로드는 본사(admin/manager) 전용이다. 읽기는 로그인한 모든 사용자에게 열려 있다.
+
+---
+
 ## [2.4-draft] - 2026-07-13
 
 ### 추가
