@@ -104,4 +104,27 @@ Purpose: mustChangePassword=true 계정의 강제 비밀번호 변경
 Auth required: 로그인 (requireUser)
 Response: 성공 시 redirect(/)
 Related repository: credentials.server.ts#setPassword -> members.repository.server.ts#setMemberPasswordHash, members.repository.server.ts#updateMember(mustChangePassword=false)
+
+Route: GET /settings (routes/settings.tsx loader, tab=menu)
+Purpose: 사이드바 메뉴 관리 탭 데이터 조회(본사 전용). 일반 탭(프로필/알림/계정)은 아직 스캐폴드(서버 저장 없음)라 별도 API 없음
+Auth required: 로그인 (requireUser)
+Allowed roles: canManage(admin/manager)만 "메뉴 관리" 탭 노출, 그 외 역할은 menuItems: []
+Response: { canManage: boolean, menuItems: SidebarMenuItem[] }
+Related repository: sidebar-menu.repository.server.ts#listMenuItems
+
+Route: POST /settings (routes/settings.tsx action, intent=menu.rename|menu.createGroup|menu.deleteGroup|menu.setParent|menu.setPlacement|menu.reorder)
+Purpose: 사이드바 메뉴 제목 수정, 그룹 생성/삭제, 상위-하위 이동, 배치(주 메뉴/관리 메뉴) 변경, 순서 변경
+Auth required: 로그인 + 본사 권한 (requireHeadquarters)
+Allowed roles: admin, manager
+Request body: intent별로 id/label/placement, 또는 id/parentId, 또는 items(JSON, [{id, sortOrder}])
+Response: 성공 시 { ok: true }. 실패 시 { error: string }(400)
+Error codes: "메뉴 제목을 입력하세요.", "그룹 이름을 입력하세요.", DB 트리거 위반 시 "사이드바 메뉴는 2단계까지만 허용됩니다" 등
+Related repository: sidebar-menu.repository.server.ts#renameMenuItem/createMenuGroup/deleteMenuGroup/setMenuItemParent/setTopLevelMenuItemPlacement/reorderMenuItems
+Notes: 메뉴가 가리키는 route는 5개 고정값(fixed set)이라 이 action으로 새 라우트를 만들 수 없다 — 제목/순서/그룹핑만 변경.
+
+Route: GET / (모든 화면 공통, routes/_app.tsx loader)
+Purpose: 로그인 사용자 확인 + 사이드바 렌더용 메뉴 트리 조회(DB 우선, 실패 시 nav.ts 정적 배열로 폴백)
+Auth required: 로그인 (requireUser)
+Response: { user: Member, primaryNav: RenderNavNode[], secondaryNav: RenderNavNode[] }
+Related repository: sidebar-menu.repository.server.ts#listMenuItems, entities/sidebar-menu/lib/build-menu-tree.ts#buildMenuTree
 ```

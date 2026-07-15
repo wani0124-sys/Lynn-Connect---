@@ -1,18 +1,59 @@
+import { useState } from "react"
 import { Form, Link, NavLink, Outlet, redirect, useLoaderData, type LoaderFunctionArgs } from "react-router"
-import { Bell, LogOut, Menu, PanelLeft, PanelLeftClose, Waypoints } from "lucide-react"
+import { Bell, ChevronDown, LogOut, Menu, PanelLeft, PanelLeftClose, Waypoints } from "lucide-react"
+import { buildMenuTree } from "~/entities/sidebar-menu/lib/build-menu-tree"
+import { SIDEBAR_MENU_GROUP_ICON, SIDEBAR_MENU_ROUTE_ICON, type SidebarMenuRoute } from "~/entities/sidebar-menu/model/sidebar-menu.types"
 import { MEMBER_ROLE_LABEL } from "~/entities/member/model/member"
 import { requireUser } from "~/features/auth/model/session.server"
+import { listMenuItems } from "~/features/sidebar-menu/model/sidebar-menu.repository.server"
 import { cn } from "~/shared/lib/cn"
-import { navItems, secondaryNavItems, type NavItem } from "~/shared/config/nav"
+import { navItems, secondaryNavItems } from "~/shared/config/nav"
 import { useUiLayoutStore } from "~/shared/store/ui-layout.store"
-import { Badge } from "~/shared/ui/badge"
 import { Button } from "~/shared/ui/button"
 import { Input } from "~/shared/ui/input"
+
+// loader가 반환하는 값은 클라이언트로 직렬화되어 전달된다(turbo-stream) — 아이콘 컴포넌트(함수)는
+// 직렬화할 수 없으므로 route(문자열)만 담고, 실제 아이콘 컴포넌트는 클라이언트 렌더 시점에 조회한다.
+interface RenderNavNode {
+  key: string
+  label: string
+  route: SidebarMenuRoute | null
+  children: RenderNavNode[]
+}
+
+function navIcon(route: SidebarMenuRoute | null) {
+  return route ? SIDEBAR_MENU_ROUTE_ICON[route] : SIDEBAR_MENU_GROUP_ICON
+}
+
+// 정적 nav.ts 배열을 렌더 트리 모양으로 맞춘다(DB 조회 실패 시 fallback으로 사용).
+function fromStaticNavItems(items: typeof navItems): RenderNavNode[] {
+  return items.map((item) => ({ key: item.to, label: item.label, route: item.to as SidebarMenuRoute, children: [] }))
+}
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireUser(request)
   if (user.mustChangePassword) throw redirect("/change-password")
-  return { user }
+
+  try {
+    const menuItems = await listMenuItems()
+    const tree = buildMenuTree(menuItems)
+    const toRenderNodes = (nodes: typeof tree.primary): RenderNavNode[] =>
+      nodes.map((node) => ({
+        key: String(node.id),
+        label: node.label,
+        route: node.route,
+        children: node.children.map((child) => ({
+          key: String(child.id),
+          label: child.label,
+          route: child.route,
+          children: [],
+        })),
+      }))
+    return { user, primaryNav: toRenderNodes(tree.primary), secondaryNav: toRenderNodes(tree.secondary) }
+  } catch (error) {
+    console.error("사이드바 메뉴를 불러오지 못했습니다(마이그레이션 미적용 가능성), 기본 메뉴로 대체합니다:", error)
+    return { user, primaryNav: fromStaticNavItems(navItems), secondaryNav: fromStaticNavItems(secondaryNavItems) }
+  }
 }
 
 function Brand({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
@@ -36,65 +77,163 @@ function Brand({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: ()
   )
 }
 
+function NavLinkRow({
+  node,
+  collapsed,
+  onNavigate,
+  indent,
+}: {
+  node: RenderNavNode
+  collapsed?: boolean
+  onNavigate?: () => void
+  indent?: boolean
+}) {
+  const Icon = navIcon(node.route)
+  if (!node.route) return null
+  return (
+    <NavLink
+      to={node.route}
+      onClick={onNavigate}
+      title={collapsed ? node.label : undefined}
+      className={({ isActive }) =>
+        cn(
+          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+          isActive
+            ? "bg-primary-foreground/20 text-primary-foreground"
+            : "text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground",
+          collapsed && "justify-center px-0",
+          indent && !collapsed && "pl-9",
+        )
+      }
+    >
+      <Icon className="size-4 shrink-0" aria-hidden />
+      {!collapsed ? <span className="truncate">{node.label}</span> : null}
+    </NavLink>
+  )
+}
+
+function NavGroupRow({
+  node,
+  collapsed,
+  onNavigate,
+  expanded,
+  onToggle,
+}: {
+  node: RenderNavNode
+  collapsed?: boolean
+  onNavigate?: () => void
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const Icon = navIcon(node.route)
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        title={collapsed ? node.label : undefined}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-primary-foreground/70 transition-colors hover:bg-primary-foreground/10 hover:text-primary-foreground",
+          collapsed && "justify-center px-0",
+        )}
+      >
+        <Icon className="size-4 shrink-0" aria-hidden />
+        {!collapsed ? (
+          <>
+            <span className="min-w-0 flex-1 truncate text-left">{node.label}</span>
+            <ChevronDown className={cn("size-4 shrink-0 transition-transform", expanded && "rotate-180")} aria-hidden />
+          </>
+        ) : null}
+      </button>
+      {expanded && !collapsed ? (
+        <div className="flex flex-col gap-1 pt-1">
+          {node.children.map((child) => (
+            <NavLinkRow key={child.key} node={child} onNavigate={onNavigate} indent />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function NavList({
   items,
   collapsed,
   onNavigate,
   className,
+  expandedGroups,
+  onToggleGroup,
 }: {
-  items: NavItem[]
+  items: RenderNavNode[]
   collapsed?: boolean
   onNavigate?: () => void
   className?: string
+  expandedGroups: Set<string>
+  onToggleGroup: (key: string) => void
 }) {
   return (
     <nav className={cn("flex flex-col gap-1 p-2", className)}>
-      {items.map((item) => {
-        const Icon = item.icon
-        return (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            onClick={onNavigate}
-            title={collapsed ? item.label : undefined}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-primary-foreground/20 text-primary-foreground"
-                  : "text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground",
-                collapsed && "justify-center px-0",
-              )
-            }
-          >
-            <Icon className="size-4 shrink-0" aria-hidden />
-            {!collapsed ? <span className="truncate">{item.label}</span> : null}
-          </NavLink>
-        )
-      })}
+      {items.map((node) =>
+        node.children.length > 0 ? (
+          <NavGroupRow
+            key={node.key}
+            node={node}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+            expanded={expandedGroups.has(node.key)}
+            onToggle={() => onToggleGroup(node.key)}
+          />
+        ) : (
+          <NavLinkRow key={node.key} node={node} collapsed={collapsed} onNavigate={onNavigate} />
+        ),
+      )}
     </nav>
   )
 }
 
 export default function AppLayout() {
-  const { user } = useLoaderData<typeof loader>()
+  const { user, primaryNav, secondaryNav } = useLoaderData<typeof loader>()
   const sidebarCollapsed = useUiLayoutStore((state) => state.sidebarCollapsed)
   const toggleSidebar = useUiLayoutStore((state) => state.toggleSidebar)
   const mobileNavOpen = useUiLayoutStore((state) => state.mobileNavOpen)
   const setMobileNavOpen = useUiLayoutStore((state) => state.setMobileNavOpen)
+  // 그룹(하위 메뉴가 있는 항목)은 기본적으로 펼친 상태로 시작하고, 필요하면 접을 수 있게 한다.
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => new Set([...primaryNav, ...secondaryNav].filter((node) => node.children.length > 0).map((node) => node.key)),
+  )
+
+  function toggleGroup(key: string) {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   return (
     <div className="flex min-h-dvh">
       <aside
         className={cn(
           "hidden shrink-0 flex-col border-r border-primary bg-primary text-primary-foreground md:flex",
-          sidebarCollapsed ? "w-16" : "w-60",
+          sidebarCollapsed ? "w-16" : "w-72",
         )}
       >
         <Brand collapsed={sidebarCollapsed} />
-        <NavList items={navItems} collapsed={sidebarCollapsed} className="flex-1 overflow-y-auto" />
-        <NavList items={secondaryNavItems} collapsed={sidebarCollapsed} className="border-t border-primary-foreground/10" />
+        <NavList
+          items={primaryNav}
+          collapsed={sidebarCollapsed}
+          className="flex-1 overflow-y-auto"
+          expandedGroups={expandedGroups}
+          onToggleGroup={toggleGroup}
+        />
+        <NavList
+          items={secondaryNav}
+          collapsed={sidebarCollapsed}
+          className="border-t border-primary-foreground/10"
+          expandedGroups={expandedGroups}
+          onToggleGroup={toggleGroup}
+        />
         <div className="border-t border-primary-foreground/10 p-2">
           <Button
             variant="ghost"
@@ -116,13 +255,21 @@ export default function AppLayout() {
             onClick={() => setMobileNavOpen(false)}
             aria-hidden
           />
-          <div className="absolute inset-y-0 left-0 flex w-64 flex-col bg-primary text-primary-foreground shadow-lg">
+          <div className="absolute inset-y-0 left-0 flex w-72 flex-col bg-primary text-primary-foreground shadow-lg">
             <Brand onNavigate={() => setMobileNavOpen(false)} />
-            <NavList items={navItems} onNavigate={() => setMobileNavOpen(false)} className="flex-1 overflow-y-auto" />
             <NavList
-              items={secondaryNavItems}
+              items={primaryNav}
+              onNavigate={() => setMobileNavOpen(false)}
+              className="flex-1 overflow-y-auto"
+              expandedGroups={expandedGroups}
+              onToggleGroup={toggleGroup}
+            />
+            <NavList
+              items={secondaryNav}
               onNavigate={() => setMobileNavOpen(false)}
               className="border-t border-primary-foreground/10"
+              expandedGroups={expandedGroups}
+              onToggleGroup={toggleGroup}
             />
           </div>
         </div>
@@ -145,7 +292,6 @@ export default function AppLayout() {
           </div>
 
           <div className="flex flex-1 items-center justify-end gap-2 sm:flex-none">
-            <Badge tone="warning">SCAFFOLD</Badge>
             <Button variant="ghost" size="icon" aria-label="알림">
               <Bell aria-hidden />
             </Button>

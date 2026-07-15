@@ -349,7 +349,14 @@ Columns:
   title text            -- 점검명, 예: "정기 소방안전점검"
   inspector_org text     -- 점검기관/주체
   inspected_at date
-  result text            -- 앱 레이어에서 "적합"/"부적합"/"시정조치" 3값으로 검증(SITE_INSPECTION_RESULTS), DB enum/CHECK 제약은 없음
+  inspected_at_end date (nullable)  -- 점검이 여러 날에 걸치면 종료일. 단일일 점검이면 null
+  inspection_time text (nullable)   -- 예: "각 10:00 ~ 15:00", 자유 형식
+  result text            -- 앱 레이어에서 "적합"/"부적합"/"시정조치"/"특이사항 없음" 4값으로 검증(SITE_INSPECTION_RESULTS), DB enum/CHECK 제약은 없음
+  purpose text (nullable)        -- 점검취지
+  inspectors text (nullable)     -- 점검자(소속/성명/인원), 자유 형식 텍스트
+  content text (nullable)        -- 점검내용, 줄바꿈으로 구분된 자유 형식 텍스트
+  result_detail text (nullable)  -- 점검결과 상세, 줄바꿈으로 구분된 자유 형식 텍스트(요약 배지인 result와 별개)
+  findings text (nullable)       -- 지적사항/요청사항
   next_inspection_at date (nullable)
   requires_reinspection boolean (기본 false)
   note text (nullable)
@@ -363,12 +370,13 @@ Indexes: site_inspections_site_id_idx, site_inspections_inspected_at_idx (inspec
 Unique constraints: 없음
 RLS policies: RLS enabled. site_inspections_no_direct_access(전체 거부, anon/authenticated).
 RPC/functions: 없음
-Related APIs: apps/web/app/routes/site-detail.tsx (loader: listInspections, action: intent=inspection.create/inspection.delete)
-Related frontend screens: /sites/:siteId (점검 이력 목록 + 점검 기록 추가 모달), 대시보드 현장 점검 위젯(현장별 최신 1건)
-Migration file: supabase/migrations/20260713090000_site_inspections.sql
+Related APIs: apps/web/app/routes/site-detail.tsx (loader: listInspections, action: intent=inspection.create/inspection.delete), apps/web/app/routes/inspection-print.tsx (loader: getSiteById+getInspectionById, 결과보고 양식 인쇄 전용 화면)
+Related frontend screens: /sites/:siteId (점검 이력 목록 + 점검 기록 추가 모달), /sites/:siteId/inspections/:inspectionId/print (결과보고 양식 인쇄), 대시보드 현장 점검 위젯(현장별 최신 1건)
+Migration file: supabase/migrations/20260713090000_site_inspections.sql, supabase/migrations/20260714090509_add_site_inspection_report_fields.sql(inspected_at_end/inspection_time/purpose/inspectors/content/result_detail/findings 추가)
 Notes:
   - 쓰기 권한은 `requireSiteWriteAccess(request, siteId)`(`canWriteSite`)로 판정한다. 본사(admin/manager)는 모든 site_id에, 현장(member) 계정은 자신의 Member.siteId와 일치하는 site_id에만 쓸 수 있다. 읽기는 loader의 `requireUser`만으로 전체 공개(본사·타 현장 자료 열람 가능).
-  - 수정(edit) API는 없다 — 잘못 입력한 기록은 삭제 후 재등록한다. 필요해지면 updateInspection을 추가한다.
+  - 2026-07-15 updateInspection 추가(sites.repository.server.ts) — intent=inspection.update. 첨부파일은 추가만 가능하고(기존 첨부 삭제는 아직 없음), 텍스트 필드는 전체 교체.
+  - 20260714090509 migration은 전부 nullable additive column이다. 2026-07-15 production Supabase에 적용 완료(적용 전 "점검 기록 추가" 저장 시 content 컬럼 없음 오류가 발생했었음).
 
 Schema: public
 Table: site_inspection_attachments
@@ -429,6 +437,34 @@ Notes:
   - Why normalization is not enough: 현재 managed_site_ids는 실제 쓰기 권한 판정(requireSiteWriteAccess/canWriteSite)에는 쓰이지 않고 멤버 관리 화면의 표시/필터 전용이라, 별도 join table을 두기보다 배열 + 삭제 트리거로 단순하게 유지하기로 결정했다(2026-07-15). 실제 권한 판정에 managed_site_ids를 사용하게 되면 join table로 재설계를 검토한다.
   - 비밀번호 해시(password_hash)는 목록/상세 조회 SELECT 절에 포함하지 않고 로그인/비밀번호 변경 전용 함수(getMemberCredentialsByEmail/setMemberPasswordHash)에서만 조회한다.
   - 2026-07-15 production Supabase 프로젝트에 적용 완료. 마지막 인메모리 seedMembers와 동일한 데모 계정 6개를 시드 데이터로 함께 넣었다(비밀번호는 기존 데모 비밀번호를 그대로 유지, scrypt로 해시). USR-003의 site_id=1은 기존 sites 테이블의 실제 현장과 연결 확인됨.
+
+Schema: public
+Table: sidebar_menu_items
+Purpose: 사이드바 메뉴의 제목/순서/상위-하위(2단계 고정) 구조를 관리자가 설정 화면(메뉴 관리 탭)에서 편집할 수 있게 한다. apps/web/app/shared/config/nav.ts의 하드코딩 배열(navItems/secondaryNavItems)을 대체한다. 2026-07-15 사용자 확인: 메뉴가 가리키는 화면은 기존 5개(부서별 업무기준/현장 점검/문서 관리/멤버 관리/설정)로 고정하고 새 라우트는 추가하지 않는다.
+Columns:
+  id bigint (identity)
+  label text
+  route text (nullable) -- null이면 하위 메뉴를 묶는 상위 그룹. 값이 있으면 5개 고정 화면 중 하나('/standards' | '/sites' | '/documents' | '/members' | '/settings')
+  parent_id bigint (self-FK, on delete set null) -- 그룹 삭제 시 하위 메뉴는 삭제되지 않고 최상위로 승격
+  placement text ('primary' | 'secondary', 기본 'primary') -- 사이드바 상단(스크롤 영역) vs 하단(고정 관리 영역)
+  sort_order int (기본 0)
+  created_at timestamptz
+  updated_at timestamptz
+Primary key: id
+Foreign keys: parent_id -> sidebar_menu_items(id) on delete set null
+Indexes: sidebar_menu_items_parent_id_idx, sidebar_menu_items_route_key(unique, route, route is not null인 행만)
+Unique constraints: sidebar_menu_items_route_key(route, partial unique) -- 화면 하나는 메뉴 트리에 한 번만 등장
+Check constraints: route는 5개 고정값만 허용, placement는 primary/secondary만 허용, parent_id가 있으면 route가 not null이어야 함(하위 메뉴는 항상 리프)
+RLS policies: RLS enabled. sidebar_menu_items_no_direct_access(전체 거부, anon/authenticated) — service role로만 접근.
+RPC/functions: enforce_sidebar_menu_items_two_levels() + trigger sidebar_menu_items_two_levels(insert/update) — (1) parent_id가 가리키는 행이 실제 최상위(parent_id is null)인지, (2) 그 행의 route가 null(그룹)인지, (3) placement가 부모와 같은지 검증해 2단계 고정과 상위-하위 배치 일치를 강제한다.
+Related APIs: apps/web/app/routes/settings.tsx (loader/action, intent=menu.*), apps/web/app/routes/_app.tsx (loader에서 사이드바 렌더용 트리 조회) — apps/web/app/features/sidebar-menu/model/sidebar-menu.repository.server.ts를 직접 호출
+Related frontend screens: /settings (메뉴 관리 탭), 전체 화면 공통 사이드바(_app.tsx)
+Migration file: supabase/migrations/20260715060300_add_sidebar_menu_items.sql
+Notes:
+  - 그룹 삭제(deleteMenuGroup)는 route가 not null인 리프(고정 5개 화면)에는 적용할 수 없다(where route is null 조건으로 방어). 리프는 항상 어딘가(최상위 또는 그룹 하위)에 남아있어야 한다 — 사용자가 화면 자체를 메뉴에서 완전히 숨기는 기능은 이번 범위에 없다.
+  - 최상위 항목의 placement를 바꾸면(setTopLevelMenuItemPlacement) 하위 메뉴도 함께 옮긴다(트리거가 불일치를 거부하기 때문에 repository에서 먼저 자식들을 갱신).
+  - _app.tsx의 loader는 이 테이블 조회 실패 시(마이그레이션 미적용 등) apps/web/app/shared/config/nav.ts의 정적 배열로 폴백한다.
+  - 작성 시점(2026-07-15) 기준 production Supabase 적용 여부는 MIGRATION.md 참고.
 
 Schema: public
 Table: document_series
