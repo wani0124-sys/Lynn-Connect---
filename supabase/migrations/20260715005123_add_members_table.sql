@@ -72,28 +72,29 @@ create trigger sites_cleanup_managed_site_ids
   for each row execute function public.strip_deleted_site_from_managed_sites();
 
 -- 데모 시드 계정 이관(기존 apps/web/app/entities/member/model/member.ts의 seedMembers와 동일한 데이터).
--- 비밀번호는 apps/web/app/features/auth/model/credentials.server.ts의 기존 데모 비밀번호를 scrypt로 해시한 값이다.
+-- 비밀번호는 계정별로 무작위 생성한 값을 scrypt로 해시했다(저장소가 public이라 사전 단어 기반
+-- 데모 비밀번호를 그대로 커밋하지 않는다). 실제 값은 계정 관리자에게 별도로 전달한다.
 insert into public.members
   (id, name, email, role, status, site_id, "position", department, menu_permission, managed_site_ids, password_hash, joined_at, must_change_password)
 values
   ('USR-001', '관리자', 'admin@woomi.dev', 'admin', 'active', null, '대표', '경영지원팀', 'all', null,
-    'b9b0d004f0e7df6ea21038d3c9f3a190:cbf7b9e5e2ebf4f454cebd46abc277a6c65debde7b203a3801a743465add6f6b85f0264fdbbac917f2df3e602c76dd8a4d0f88d9d614495e32b4c9eb2f6b9359',
+    'd8138deb48965db2140537052b7560a2:34ccd81cec6a611e25cdaae789bf25d7b8cc20c832bde9ff382430f41c896bff3bf6f9d2ab060b50e80ce301b419e96c092ad77621c9698c40795f96af5a4f1d',
     '2026-01-05', false),
   ('USR-002', '이도현', 'manager@woomi.dev', 'manager', 'active', null, '팀장', '건축기획팀', 'all', null,
-    '73b17d8c1553f68bb6bdd1b6f6a1aa6c:d5cf40ba355a14f918147eb5652293096751f06b7d2156f051404aee4b8d7670eefef76216cece788d9852d13787a41c2ae55a1b14dd905608ddbfee71ca827e',
+    '80e512c4e1ad765c59b5638011410c94:e8f7a4fa8add66cc633e514826379ce0312b38a951d84ce9fed2f3af073ff8defe58c19082367cba824b2b11366bc690ae76c7e5444b998bfd32735ac0791d5a',
     '2026-02-10', false),
   ('USR-003', '박서준', 'member@woomi.dev', 'member', 'active', (select id from public.sites where id = 1), '과장', '현장관리팀', 'limited',
     (select array_agg(id) from public.sites where id = 1),
-    '449b1799418a341963273e71972f8cd4:028cee11393f53fbec782b15066cb17d14a200bca5f00d22b491e8294af78b062ada60eb493859512ee33f79f39dd951d339946fc548921844870c220e254750',
+    'cf46600e0cdb74bac8ded7cc39df6623:4e1ad03c622c89ccb16cfd4a5d3f78c6898c1d79482f312e22aa412fdb0a33770a2ae62716e265e79b67798ca3b03a7e7b4f24daf8a280c5a881bad71598d212',
     '2026-03-02', false),
   ('USR-004', '최유나', 'yuna@woomi.dev', 'member', 'invited', null, '대리', '현장관리팀', 'limited', array[]::bigint[],
-    '1f0ac26dba1f2d40883b31eafa50e344:50886f34862a4c5d3041661078d1d6cff85716349c93e5e9df40996b11a41e094ccf53e403023232a031b7cfa860d7eab1e0b2a26a000b220820590e92164d4b',
+    '316157e48fe03e5e4e9119cf4cc94d73:f81f26850a8f59046804492bb3fef5b289dadeb3be28f5d2a47edf861dd059e976fffe87f2fed7b64c7203ee0ee4f1b3e6c745f0f6f8e6baf2adfe0718547234',
     '2026-04-18', true),
   ('USR-005', '정민재', 'minjae@woomi.dev', 'manager', 'suspended', null, '부장', '건축기획팀', 'all', null,
-    '1f0ac26dba1f2d40883b31eafa50e344:50886f34862a4c5d3041661078d1d6cff85716349c93e5e9df40996b11a41e094ccf53e403023232a031b7cfa860d7eab1e0b2a26a000b220820590e92164d4b',
+    '9a2a8aa1556ec21f846d7674963a7634:bd741e0c22b752d4e6476f258f72fb141cadffbf870fa1f9b4ef64633ea1a4475b609a7c37d84e39c1f9c6583a76c72a40ad8fb7cfd583a62a10040cfadbdb1d',
     '2026-01-20', false),
   ('USR-006', '한지우', 'jiwoo@woomi.dev', 'member', 'invited', null, '사원', '현장관리팀', 'limited', array[]::bigint[],
-    '1f0ac26dba1f2d40883b31eafa50e344:50886f34862a4c5d3041661078d1d6cff85716349c93e5e9df40996b11a41e094ccf53e403023232a031b7cfa860d7eab1e0b2a26a000b220820590e92164d4b',
+    'ec5029c4c1a5a9437bf73e8abe5dd08f:414bded5c522de5eec82e34c15e02aa84b157469a5dafb5fac0d7183acf7a6420b8c670674a1e9c73581aced925a74f1b765494fd39c5cc44e94580cc505c952',
     '2026-05-30', true)
 on conflict (id) do nothing;
 
