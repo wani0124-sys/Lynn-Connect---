@@ -394,6 +394,43 @@ Notes:
   - 이 migration은 작성 시점(2026-07-13) 기준 실제 Supabase 프로젝트에 아직 적용되지 않았다 — 적용 전에는 /sites 관련 화면이 "Could not find the table" 오류로 500을 반환한다.
 
 Schema: public
+Table: members
+Purpose: 계정(멤버) 목록. 2026-07-14 멤버 관리 기능 신설 시 인메모리 seedMembers(apps/web/app/entities/member/model/member.ts)로 임시 구현했다가, 서버 재시작 시 저장/삭제 내역이 초기 시드로 리셋되는 문제(2026-07-15 발견)로 이 테이블로 이관했다.
+Columns:
+  id text ('USR-XXX', members_id_seq 시퀀스로 자동 생성)
+  name text
+  email text (대소문자 무관 유니크, lower(email) unique index)
+  role text ('admin' | 'manager' | 'member', check constraint)
+  status text ('active' | 'invited' | 'suspended', check constraint, 기본 'invited')
+  site_id bigint (FK, on delete set null) -- 현장(member) 계정의 소속 현장. 본사(admin/manager)는 null
+  position text (nullable)
+  department text (nullable)
+  menu_permission text ('all' | 'limited', check constraint, 기본 'limited')
+  managed_site_ids bigint[] (nullable) -- null이면 전체 현장, 배열이면 지정 현장만
+  password_hash text -- salt:hash(scrypt, node:crypto). 평문 비밀번호는 저장하지 않는다.
+  joined_at date
+  must_change_password boolean (기본 true)
+  created_at timestamptz
+  updated_at timestamptz
+Primary key: id
+Foreign keys: site_id -> sites(id) on delete set null
+Indexes: members_site_id_idx, members_email_lower_idx (unique, lower(email))
+Unique constraints: members_email_lower_idx (lower(email))
+RLS policies: RLS enabled. members_no_direct_access(전체 거부, anon/authenticated) — service role로만 접근.
+RPC/functions: strip_deleted_site_from_managed_sites() + trigger sites_cleanup_managed_site_ids(sites AFTER 아님 BEFORE DELETE) — 현장 삭제 시 모든 멤버의 managed_site_ids 배열에서 해당 site_id를 제거한다(FK로 표현할 수 없는 배열 컬럼의 고아 참조 방지).
+Related APIs: apps/web/app/routes/members.tsx (loader/action, intent=member.*), apps/web/app/routes/login.tsx, apps/web/app/routes/change-password.tsx — apps/web/app/features/members/model/members.repository.server.ts를 직접 호출
+Related frontend screens: /members (멤버 관리 + 관리 현장 권한 탭), /login, /change-password
+Migration file: supabase/migrations/20260715005123_add_members_table.sql
+Notes:
+  - Duplicated data: managed_site_ids(bigint[])는 sites.id를 정규화된 join table 없이 배열로 보관한다.
+  - Source of truth: 각 site_id 값의 존재 여부는 sites 테이블.
+  - Sync strategy: sites 삭제 시 트리거로 배열에서 자동 제거. 별도 배치 정합성 검사는 없음.
+  - Stale data tolerance: 낮음(삭제 시 즉시 트리거로 정리하므로 사실상 stale 상태가 존재하지 않음).
+  - Why normalization is not enough: 현재 managed_site_ids는 실제 쓰기 권한 판정(requireSiteWriteAccess/canWriteSite)에는 쓰이지 않고 멤버 관리 화면의 표시/필터 전용이라, 별도 join table을 두기보다 배열 + 삭제 트리거로 단순하게 유지하기로 결정했다(2026-07-15). 실제 권한 판정에 managed_site_ids를 사용하게 되면 join table로 재설계를 검토한다.
+  - 비밀번호 해시(password_hash)는 목록/상세 조회 SELECT 절에 포함하지 않고 로그인/비밀번호 변경 전용 함수(getMemberCredentialsByEmail/setMemberPasswordHash)에서만 조회한다.
+  - 2026-07-15 production Supabase 프로젝트에 적용 완료. 마지막 인메모리 seedMembers와 동일한 데모 계정 6개를 시드 데이터로 함께 넣었다(비밀번호는 기존 데모 비밀번호를 그대로 유지, scrypt로 해시). USR-003의 site_id=1은 기존 sites 테이블의 실제 현장과 연결 확인됨.
+
+Schema: public
 Table: document_series
 Purpose: 반복 개정되는 회사 표준 문서(예: "현장 주요 업무 체크리스트")의 시리즈. 시리즈 하나가 여러 리비전(document_revisions)을 갖는다.
 Columns:

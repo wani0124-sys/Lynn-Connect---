@@ -76,4 +76,32 @@ Allowed roles: admin, manager
 Request body: { intent: "archive" | "unarchive" | "delete" }
 Response: archive/unarchive는 { ok: true } (같은 라우트 loader 재검증), delete는 redirect(/mails)
 Related repository: mail-archive.repository.server.ts#setArchived, #deleteEmail
+
+Route: GET /members (routes/members.tsx loader)
+Purpose: 계정(멤버) 목록 + 관리 현장 권한 탭 데이터 조회
+Auth required: 로그인 (requireUser)
+Allowed roles: admin/manager/member 전체 조회 가능. canManage(admin/manager)만 생성/수정/삭제 UI 노출
+Response: { members: Member[], currentUserId: string, sites: Site[], canManage: boolean }
+Related repository: members.repository.server.ts#listMembers
+
+Route: POST /members (routes/members.tsx action, intent=member.create|member.bulkCreate|member.update|member.delete|member.bulkDelete|member.updateSitePermission)
+Purpose: 계정 생성/일괄 생성/수정/삭제, 관리 현장 권한 수정
+Auth required: 로그인 + 본사 권한 (requireHeadquarters)
+Allowed roles: admin, manager
+Request body: intent별로 name/email/role/position/department/menuPermission/siteId, 또는 id/ids, 또는 managedSiteIds(JSON)
+Response: 성공 시 { ok: true }(create/bulkCreate는 { ok: true, created: CreatedAccount[] } 포함). 실패 시 { error: string }(400)
+Error codes: "이미 등록된 이메일입니다.", "소속 현장을 선택하세요.", "본인 계정은 삭제할 수 없습니다." 등
+Related repository: members.repository.server.ts#createMember/updateMember/deleteMember/getMemberByEmail/getMemberById
+Notes: 계정 생성 시 이메일을 아이디로, credentials.server.ts#DEFAULT_TEMP_PASSWORD("Woomilynn")를 초기 비밀번호로 고정 발급하고 hashPassword로 해시해 password_hash 컬럼에 직접 insert한다. mustChangePassword=true로 최초 로그인 시 /change-password로 강제 이동.
+
+Route: GET/POST /login (routes/login.tsx loader/action)
+Purpose: 이메일/비밀번호 로그인
+Response: 성공 시 세션 쿠키 설정 + redirect(redirectTo 또는 /). 실패 시 { formError: string }(400)
+Related repository: credentials.server.ts#verifyCredentials -> members.repository.server.ts#getMemberCredentialsByEmail
+
+Route: GET/POST /change-password (routes/change-password.tsx loader/action)
+Purpose: mustChangePassword=true 계정의 강제 비밀번호 변경
+Auth required: 로그인 (requireUser)
+Response: 성공 시 redirect(/)
+Related repository: credentials.server.ts#setPassword -> members.repository.server.ts#setMemberPasswordHash, members.repository.server.ts#updateMember(mustChangePassword=false)
 ```

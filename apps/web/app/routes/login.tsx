@@ -1,25 +1,19 @@
-import {
-  data,
-  redirect,
-  useLoaderData,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
-} from "react-router"
-import { Boxes } from "lucide-react"
+import { data, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
+import { Waypoints } from "lucide-react"
 import { loginSchema } from "~/features/auth/model/login.schema"
 import {
   createUserSession,
   getUserId,
   safeRedirect,
 } from "~/features/auth/model/session.server"
-import { DEMO_ACCOUNTS, verifyCredentials } from "~/features/auth/model/credentials.server"
+import { verifyCredentials } from "~/features/auth/model/credentials.server"
 import { LoginForm } from "~/features/auth/ui/login-form"
 import { Card, CardContent, CardHeader, CardTitle } from "~/shared/ui/card"
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const userId = await getUserId(request)
   if (userId) throw redirect("/")
-  return { demoAccounts: DEMO_ACCOUNTS }
+  return null
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -41,7 +35,7 @@ export async function action({ request }: ActionFunctionArgs) {
     )
   }
 
-  const userId = verifyCredentials(parsed.data.email, parsed.data.password)
+  const userId = await verifyCredentials(parsed.data.email, parsed.data.password)
   if (!userId) {
     return data(
       {
@@ -57,16 +51,14 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function LoginRoute() {
-  const { demoAccounts } = useLoaderData<typeof loader>()
-
   return (
     <div className="flex min-h-dvh items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
           <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Boxes className="size-5" aria-hidden />
+            <Waypoints className="size-5" aria-hidden />
           </div>
-          <h1 className="text-lg font-semibold tracking-tight">Woomi Admin</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Lynn-Connect</h1>
           <p className="text-sm text-muted-foreground">관리자 콘솔에 로그인</p>
         </div>
 
@@ -75,7 +67,7 @@ export default function LoginRoute() {
             <CardTitle>로그인</CardTitle>
           </CardHeader>
           <CardContent>
-            <LoginForm demoAccounts={demoAccounts} />
+            <LoginForm />
           </CardContent>
         </Card>
       </div>

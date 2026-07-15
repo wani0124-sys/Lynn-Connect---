@@ -5,24 +5,25 @@ import {
   MEMBER_GROUP_LABEL,
   MEMBER_GROUP_TONE,
   MENU_PERMISSION_LABEL,
-  addMember,
-  findMemberByEmail,
-  findMemberById,
   getMemberGroup,
   isHeadquarters,
-  nextMemberId,
-  removeMember,
-  seedMembers,
-  updateMember,
   type CreatableMemberRole,
   type Member,
   type MemberGroup,
   type MenuPermission,
 } from "~/entities/member/model/member"
 import type { Site } from "~/entities/site/model/site.types"
-import { generateTempPassword, setPassword } from "~/features/auth/model/credentials.server"
+import { generateTempPassword, hashPassword } from "~/features/auth/model/credentials.server"
 import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
 import { listSites } from "~/features/sites/model/sites.repository.server"
+import {
+  createMember,
+  deleteMember,
+  getMemberByEmail,
+  getMemberById,
+  listMembers,
+  updateMember,
+} from "~/features/members/model/members.repository.server"
 import { formatManagedSites } from "~/features/members/lib/format-managed-sites"
 import type { BulkCreateRow } from "~/features/members/ui/member-bulk-create-modal"
 import { MemberBulkCreateModal } from "~/features/members/ui/member-bulk-create-modal"
@@ -51,7 +52,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
   } catch (error) {
     console.error("현장 목록을 불러오지 못했습니다:", error)
   }
-  return { members: seedMembers, currentUserId: user.id, sites, canManage: isHeadquarters(user.role) }
+  let members: Member[] = []
+  try {
+    members = await listMembers()
+  } catch (error) {
+    console.error("멤버 목록을 불러오지 못했습니다:", error)
+  }
+  return { members, currentUserId: user.id, sites, canManage: isHeadquarters(user.role) }
 }
 
 function computeManagedSiteIds(existing: Member, role: CreatableMemberRole, siteId: number | null): number[] | null {
@@ -80,11 +87,10 @@ export async function action({ request }: ActionFunctionArgs) {
 
         if (!name || !email) return data({ error: "이름과 이메일을 입력하세요." }, { status: 400 })
         if (role === "member" && siteId === null) return data({ error: "소속 현장을 선택하세요." }, { status: 400 })
-        if (findMemberByEmail(email)) return data({ error: "이미 등록된 이메일입니다." }, { status: 400 })
+        if (await getMemberByEmail(email)) return data({ error: "이미 등록된 이메일입니다." }, { status: 400 })
 
         const tempPassword = generateTempPassword()
-        addMember({
-          id: nextMemberId(),
+        await createMember({
           name,
           email,
           role,
@@ -94,10 +100,10 @@ export async function action({ request }: ActionFunctionArgs) {
           department,
           menuPermission,
           managedSiteIds: role === "member" ? (siteId !== null ? [siteId] : []) : null,
+          passwordHash: hashPassword(tempPassword),
           joinedAt: new Date().toISOString().slice(0, 10),
           mustChangePassword: true,
         })
-        setPassword(email, tempPassword)
 
         return { ok: true as const, created: [{ name, email, tempPassword }] }
       }
@@ -116,12 +122,11 @@ export async function action({ request }: ActionFunctionArgs) {
           const email = row.email?.trim() ?? ""
           if (!name || !email) continue
           const normalized = email.toLowerCase()
-          if (seenEmails.has(normalized) || findMemberByEmail(email)) continue
+          if (seenEmails.has(normalized) || (await getMemberByEmail(email))) continue
           seenEmails.add(normalized)
 
           const tempPassword = generateTempPassword()
-          addMember({
-            id: nextMemberId(),
+          await createMember({
             name,
             email,
             role,
@@ -131,10 +136,10 @@ export async function action({ request }: ActionFunctionArgs) {
             department: null,
             menuPermission: role === "manager" ? "all" : "limited",
             managedSiteIds: role === "member" ? (siteId !== null ? [siteId] : []) : null,
+            passwordHash: hashPassword(tempPassword),
             joinedAt: new Date().toISOString().slice(0, 10),
             mustChangePassword: true,
           })
-          setPassword(email, tempPassword)
           created.push({ name, email, tempPassword })
         }
 
@@ -145,7 +150,7 @@ export async function action({ request }: ActionFunctionArgs) {
       }
       case "member.update": {
         const id = String(form.get("id") ?? "")
-        const existing = findMemberById(id)
+        const existing = await getMemberById(id)
         if (!existing) return data({ error: "존재하지 않는 계정입니다." }, { status: 400 })
 
         const name = String(form.get("name") ?? "").trim()
@@ -159,7 +164,7 @@ export async function action({ request }: ActionFunctionArgs) {
         if (!name) return data({ error: "이름을 입력하세요." }, { status: 400 })
         if (role === "member" && siteId === null) return data({ error: "소속 현장을 선택하세요." }, { status: 400 })
 
-        updateMember(id, {
+        await updateMember(id, {
           name,
           role,
           position,
@@ -173,14 +178,14 @@ export async function action({ request }: ActionFunctionArgs) {
       case "member.delete": {
         const id = String(form.get("id") ?? "")
         if (id === user.id) return data({ error: "본인 계정은 삭제할 수 없습니다." }, { status: 400 })
-        removeMember(id)
+        await deleteMember(id)
         return { ok: true as const }
       }
       case "member.bulkDelete": {
         const ids = JSON.parse(String(form.get("ids") ?? "[]")) as string[]
         for (const id of ids) {
           if (id === user.id) continue
-          removeMember(id)
+          await deleteMember(id)
         }
         return { ok: true as const }
       }
@@ -188,7 +193,7 @@ export async function action({ request }: ActionFunctionArgs) {
         const id = String(form.get("id") ?? "")
         const raw = String(form.get("managedSiteIds") ?? "null")
         const managedSiteIds = raw === "null" ? null : (JSON.parse(raw) as number[])
-        updateMember(id, { managedSiteIds })
+        await updateMember(id, { managedSiteIds })
         return { ok: true as const }
       }
       default:

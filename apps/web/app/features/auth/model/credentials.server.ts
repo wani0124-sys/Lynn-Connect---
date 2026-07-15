@@ -1,33 +1,37 @@
-// 데모 전용 자격증명. .server.ts 접미사로 클라이언트 번들에서 제외된다.
-// TODO[security]: 실제 서비스에서는 해시된 비밀번호를 DB에 저장하고 백엔드에서 검증한다.
-import { findMemberByEmail } from "~/entities/member/model/member"
+// .server.ts 접미사로 클라이언트 번들에서 제외된다.
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto"
+import { getMemberCredentialsByEmail, setMemberPasswordHash } from "~/features/members/model/members.repository.server"
 
-const DEMO_PASSWORDS: Record<string, string> = {
-  "admin@woomi.dev": "admin1234",
-  "manager@woomi.dev": "manager1234",
-  "member@woomi.dev": "member1234",
+const SCRYPT_KEYLEN = 64
+
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString("hex")
+  const hash = scryptSync(password, salt, SCRYPT_KEYLEN).toString("hex")
+  return `${salt}:${hash}`
 }
 
-// 로그인 화면 안내용 데모 계정. loader에서 클라이언트로 내려보내 화면에 표시한다(데모 목적).
-export const DEMO_ACCOUNTS = [
-  { email: "admin@woomi.dev", password: "admin1234", role: "관리자" },
-  { email: "manager@woomi.dev", password: "manager1234", role: "매니저" },
-  { email: "member@woomi.dev", password: "member1234", role: "구성원" },
-]
+function verifyPassword(password: string, stored: string): boolean {
+  const [salt, hashHex] = stored.split(":")
+  if (!salt || !hashHex) return false
+  const hash = scryptSync(password, salt, SCRYPT_KEYLEN)
+  const storedHash = Buffer.from(hashHex, "hex")
+  if (hash.length !== storedHash.length) return false
+  return timingSafeEqual(hash, storedHash)
+}
 
 // 성공하면 member id를, 실패하면 null을 반환한다. 정지 계정은 로그인할 수 없다.
-export function verifyCredentials(email: string, password: string): string | null {
-  const member = findMemberByEmail(email)
-  if (!member) return null
-  if (member.status === "suspended") return null
-  const expected = DEMO_PASSWORDS[member.email.toLowerCase()]
-  if (!expected || expected !== password) return null
-  return member.id
+export async function verifyCredentials(email: string, password: string): Promise<string | null> {
+  const credentials = await getMemberCredentialsByEmail(email)
+  if (!credentials) return null
+  if (credentials.status === "suspended") return null
+  if (!verifyPassword(password, credentials.passwordHash)) return null
+  return credentials.id
 }
 
-// 멤버 관리에서 계정을 생성/재발급할 때 서버가 강제로 부여하는 임시 비밀번호를 저장한다.
-export function setPassword(email: string, password: string): void {
-  DEMO_PASSWORDS[email.trim().toLowerCase()] = password
+// 멤버 관리에서 기존 계정의 비밀번호를 재발급/변경할 때 사용한다(계정 생성 시에는 password_hash를
+// insert에 직접 포함하므로 이 함수를 쓰지 않는다).
+export async function setPassword(email: string, password: string): Promise<void> {
+  await setMemberPasswordHash(email, hashPassword(password))
 }
 
 // 계정 생성/일괄 생성 시 이메일을 아이디로, 이 값을 초기 비밀번호로 강제 부여한다.

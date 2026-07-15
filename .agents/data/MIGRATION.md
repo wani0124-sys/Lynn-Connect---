@@ -223,6 +223,7 @@ Approval:
 | 날짜 | 파일/버전 | 변경 요약 | 영향 범위 | 롤백 |
 |---|---|---|---|---|
 | YYYY-MM-DD | `<migration-file>` | `<summary>` | `<tables/apis>` | `<rollback>` |
+| 2026-07-15 | `20260715005123_add_members_table.sql` | 인메모리 seedMembers(서버 재시작 시 저장/삭제 내역 유실)를 members 테이블로 이관. password_hash(scrypt) 컬럼 신설, sites 삭제 시 managed_site_ids 정리 트리거 추가 | members 테이블 신설, /members, /login, /change-password, credentials.server.ts, session.server.ts | simple rollback(신규 테이블/트리거 제거로 원상복구 가능하나, 적용 후에는 DB가 유일한 저장소이므로 적용 전 되돌리려면 앱 코드를 함께 되돌려야 한다). 사용자 승인 후 2026-07-15 production Supabase(session pooler 경유, DB 비밀번호 사용자 제공)에 적용 완료. 시드 계정 6건 정상 삽입 확인. |
 
 ---
 

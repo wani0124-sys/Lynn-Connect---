@@ -1,9 +1,9 @@
 import { data, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
 import { ShieldAlert } from "lucide-react"
-import { updateMember } from "~/entities/member/model/member"
 import { changePasswordSchema } from "~/features/auth/model/change-password.schema"
 import { setPassword } from "~/features/auth/model/credentials.server"
 import { requireUser } from "~/features/auth/model/session.server"
+import { updateMember } from "~/features/members/model/members.repository.server"
 import { ChangePasswordForm } from "~/features/auth/ui/change-password-form"
 import { Card, CardContent, CardHeader, CardTitle } from "~/shared/ui/card"
 
@@ -29,8 +29,8 @@ export async function action({ request }: ActionFunctionArgs) {
     )
   }
 
-  setPassword(user.email, parsed.data.newPassword)
-  updateMember(user.id, { mustChangePassword: false, status: user.status === "invited" ? "active" : user.status })
+  await setPassword(user.email, parsed.data.newPassword)
+  await updateMember(user.id, { mustChangePassword: false, status: user.status === "invited" ? "active" : user.status })
 
   return redirect("/")
 }
