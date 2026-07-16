@@ -11,6 +11,7 @@ export default [
     route("standards/new", "routes/standards-new.tsx"),
     route("standards/:postId", "routes/standards-detail.tsx"),
     route("sites", "routes/sites.tsx"),
+    route("work-orders", "routes/work-orders.tsx"),
     route("documents", "routes/documents.tsx"),
     route("members", "routes/members.tsx"),
     route("settings", "routes/settings.tsx"),

@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk"
 import type { Site, SiteInspection } from "~/entities/site/model/site.types"
 import { getAnthropicClient } from "~/shared/lib/anthropic.server"
 
@@ -55,13 +56,31 @@ export async function askAboutInspections(
   const recordsText = sites.map((site) => formatSiteBlock(site, inspectionsBySiteId.get(site.id) ?? [])).join("\n\n")
 
   const client = getAnthropicClient()
-  const message = await client.messages.create({
-    model: SITE_ANALYSIS_MODEL,
-    max_tokens: MAX_ANSWER_TOKENS,
-    system: `${SYSTEM_PROMPT}\n\n[전체 현장 점검 기록]\n${recordsText}`,
-    messages: conversation.map((m) => ({ role: m.role, content: m.content })),
-    tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 3, allowed_callers: ["direct"] }],
-  })
+
+  let message: Anthropic.Message
+  try {
+    message = await client.messages.create({
+      model: SITE_ANALYSIS_MODEL,
+      max_tokens: MAX_ANSWER_TOKENS,
+      system: `${SYSTEM_PROMPT}\n\n[전체 현장 점검 기록]\n${recordsText}`,
+      messages: conversation.map((m) => ({ role: m.role, content: m.content })),
+      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 3, allowed_callers: ["direct"] }],
+    })
+  } catch (error) {
+    if (error instanceof Anthropic.RateLimitError) {
+      throw new Error("요청이 많아 잠시 후 다시 시도해 주세요.")
+    }
+    if (error instanceof Anthropic.InternalServerError) {
+      throw new Error("AI 서버가 일시적으로 혼잡합니다. 잠시 후 다시 시도해 주세요.")
+    }
+    if (error instanceof Anthropic.APIConnectionError) {
+      throw new Error("AI 서버에 연결하지 못했습니다. 네트워크 상태를 확인하고 다시 시도해 주세요.")
+    }
+    if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
+      throw new Error("AI 기능 설정에 문제가 있습니다. 관리자에게 문의해 주세요.")
+    }
+    throw new Error("답변을 받는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+  }
 
   const answer = message.content
     .filter((block) => block.type === "text")

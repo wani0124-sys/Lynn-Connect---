@@ -58,7 +58,7 @@ export function InspectionStandardGuide() {
                 <img
                   src={stage.example.src}
                   alt={stage.example.caption}
-                  className="h-auto w-full rounded-md border border-border/20"
+                  className="h-auto w-full rounded-md border border-border/5"
                 />
                 <p className="mt-2 text-center text-xs text-muted-foreground">{stage.example.caption}</p>
               </div>
