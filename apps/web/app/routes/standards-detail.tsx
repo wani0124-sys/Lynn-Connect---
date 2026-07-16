@@ -8,7 +8,7 @@ import {
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from "react-router"
-import { Check, Download, ExternalLink, Paperclip, Pencil, Trash2, Upload, X } from "lucide-react"
+import { Check, Download, ExternalLink, List, Paperclip, Pencil, Trash2, Upload, X } from "lucide-react"
 import { buildDepartmentOptions } from "~/entities/task-standard/lib/build-department-options"
 import { CategoryBadge } from "~/entities/task-standard/ui/category-badge"
 import { isHeadquarters } from "~/entities/member/model/member"
@@ -222,10 +222,6 @@ export default function StandardsDetailRoute() {
 
   return (
     <div className="space-y-6">
-      <Link to="/standards" className="text-sm text-muted-foreground hover:text-foreground">
-        <span className="font-semibold text-foreground">[목록]</span> 부서별 업무기준 (메일공지)
-      </Link>
-
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 space-y-1">
           {isEditingTitle ? (
@@ -264,14 +260,20 @@ export default function StandardsDetailRoute() {
             {post.senderEmail ? ` <${post.senderEmail}>` : ""} · {formatDateTime(post.sentAt ?? post.createdAt)}
           </p>
         </div>
-        {canManage ? (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          {canManage ? (
             <Button variant="danger" onClick={() => setConfirmingDelete(true)}>
               <Trash2 aria-hidden />
               삭제
             </Button>
-          </div>
-        ) : null}
+          ) : null}
+          <Link to="/standards">
+            <Button>
+              <List aria-hidden />
+              목록
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {actionError ? <div className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{actionError}</div> : null}

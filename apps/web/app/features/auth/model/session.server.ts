@@ -1,5 +1,6 @@
 import { createCookieSessionStorage, redirect } from "react-router"
-import { canWriteSite, findMemberById, isHeadquarters, type Member } from "~/entities/member/model/member"
+import { canWriteSite, isHeadquarters, type Member } from "~/entities/member/model/member"
+import { getMemberById } from "~/features/members/model/members.repository.server"
 
 // TODO[security]: 데모용 기본 시크릿. 운영에서는 반드시 SESSION_SECRET 환경변수를 설정한다.
 const sessionSecret = process.env.SESSION_SECRET ?? "dev-insecure-session-secret-change-me"
@@ -45,7 +46,7 @@ export async function getUserId(request: Request): Promise<string | null> {
 export async function getUser(request: Request): Promise<Member | null> {
   const userId = await getUserId(request)
   if (!userId) return null
-  return findMemberById(userId) ?? null
+  return getMemberById(userId)
 }
 
 // 인증이 필요한 route loader에서 호출한다. 미인증이면 로그인 화면으로 redirect(throw)한다.

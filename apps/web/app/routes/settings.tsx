@@ -1,7 +1,22 @@
 import { useState } from "react"
+import { data, useFetcher, useLoaderData, useSearchParams, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
+import { buildMenuTree } from "~/entities/sidebar-menu/lib/build-menu-tree"
+import { usePageMenuTitle } from "~/entities/sidebar-menu/lib/use-page-menu-title"
+import { isHeadquarters } from "~/entities/member/model/member"
+import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
+import {
+  createMenuGroup,
+  deleteMenuGroup,
+  listMenuItems,
+  renameMenuItem,
+  reorderMenuItems,
+  setMenuItemParent,
+  setTopLevelMenuItemPlacement,
+} from "~/features/sidebar-menu/model/sidebar-menu.repository.server"
+import { SidebarMenuManager } from "~/features/sidebar-menu/ui/sidebar-menu-manager"
 import { PageHeader } from "~/shared/ui/page-header"
 import {
   Card,
@@ -17,6 +32,7 @@ import { Textarea } from "~/shared/ui/textarea"
 import { Checkbox } from "~/shared/ui/checkbox"
 import { Button } from "~/shared/ui/button"
 import { ConfirmPanel } from "~/shared/ui/confirm-panel"
+import { Tabs } from "~/shared/ui/tabs"
 
 const profileSchema = z.object({
   name: z.string().min(1, "이름을 입력하세요."),
@@ -26,13 +42,141 @@ const profileSchema = z.object({
 
 type ProfileInput = z.infer<typeof profileSchema>
 
+export async function loader({ request }: LoaderFunctionArgs) {
+  const user = await requireUser(request)
+  const canManage = isHeadquarters(user.role)
+  if (!canManage) return { canManage, menuItems: [] }
+
+  try {
+    const menuItems = await listMenuItems()
+    return { canManage, menuItems }
+  } catch (error) {
+    console.error("사이드바 메뉴를 불러오지 못했습니다:", error)
+    return { canManage, menuItems: [] }
+  }
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  await requireHeadquarters(request)
+  const form = await request.formData()
+  const intent = String(form.get("intent") ?? "")
+
+  try {
+    switch (intent) {
+      case "menu.rename": {
+        const id = Number(form.get("id"))
+        const label = String(form.get("label") ?? "").trim()
+        if (!label) return data({ error: "메뉴 제목을 입력하세요." }, { status: 400 })
+        await renameMenuItem(id, label)
+        return { ok: true as const }
+      }
+      case "menu.createGroup": {
+        const label = String(form.get("label") ?? "").trim()
+        const placement = String(form.get("placement") ?? "primary") as "primary" | "secondary"
+        if (!label) return data({ error: "그룹 이름을 입력하세요." }, { status: 400 })
+        await createMenuGroup(label, placement)
+        return { ok: true as const }
+      }
+      case "menu.deleteGroup": {
+        await deleteMenuGroup(Number(form.get("id")))
+        return { ok: true as const }
+      }
+      case "menu.setParent": {
+        const id = Number(form.get("id"))
+        const parentIdRaw = form.get("parentId")
+        const parentId = parentIdRaw ? Number(parentIdRaw) : null
+        await setMenuItemParent(id, parentId)
+        return { ok: true as const }
+      }
+      case "menu.setPlacement": {
+        const id = Number(form.get("id"))
+        const placement = String(form.get("placement") ?? "primary") as "primary" | "secondary"
+        await setTopLevelMenuItemPlacement(id, placement)
+        return { ok: true as const }
+      }
+      case "menu.reorder": {
+        const items = JSON.parse(String(form.get("items") ?? "[]")) as { id: number; sortOrder: number }[]
+        await reorderMenuItems(items)
+        return { ok: true as const }
+      }
+      default:
+        return data({ error: "알 수 없는 요청입니다." }, { status: 400 })
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "요청을 처리하지 못했습니다."
+    return data({ error: message }, { status: 400 })
+  }
+}
+
 export default function SettingsRoute() {
+  const { canManage, menuItems } = useLoaderData<typeof loader>()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = canManage && searchParams.get("tab") === "menu" ? "menu" : "general"
+  const menuFetcher = useFetcher<typeof action>()
+  const menuError = menuFetcher.data && "error" in menuFetcher.data ? menuFetcher.data.error : null
+
+  function setTab(next: string) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      if (next === "general") params.delete("tab")
+      else params.set("tab", next)
+      return params
+    })
+  }
+
+  const tree = buildMenuTree(menuItems)
+  const pageTitle = usePageMenuTitle("/settings", "설정")
+
   return (
     <div className="space-y-6">
-      <PageHeader title="설정" description="프로필, 알림, 계정 관련 설정을 관리합니다." />
-      <ProfileSection />
-      <NotificationSection />
-      <DangerZoneSection />
+      <PageHeader title={pageTitle} description="프로필, 알림, 계정, 사이드바 메뉴 관련 설정을 관리합니다." />
+
+      {canManage ? (
+        <Tabs
+          items={[
+            { value: "general", label: "일반" },
+            { value: "menu", label: "메뉴 관리" },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      ) : null}
+
+      {tab === "menu" && canManage ? (
+        <div className="space-y-3">
+          {menuError ? <div className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{menuError}</div> : null}
+          <SidebarMenuManager
+            tree={tree}
+            pending={menuFetcher.state !== "idle"}
+            onRename={(id, label) => menuFetcher.submit({ intent: "menu.rename", id: String(id), label }, { method: "post" })}
+            onCreateGroup={(label, placement) =>
+              menuFetcher.submit({ intent: "menu.createGroup", label, placement }, { method: "post" })
+            }
+            onDeleteGroup={(id) => menuFetcher.submit({ intent: "menu.deleteGroup", id: String(id) }, { method: "post" })}
+            onSetParent={(id, parentId) =>
+              menuFetcher.submit(
+                { intent: "menu.setParent", id: String(id), parentId: parentId !== null ? String(parentId) : "" },
+                { method: "post" },
+              )
+            }
+            onSetPlacement={(id, placement) =>
+              menuFetcher.submit({ intent: "menu.setPlacement", id: String(id), placement }, { method: "post" })
+            }
+            onReorderTopLevel={(_placement, items) =>
+              menuFetcher.submit({ intent: "menu.reorder", items: JSON.stringify(items) }, { method: "post" })
+            }
+            onReorderChildren={(_parentId, items) =>
+              menuFetcher.submit({ intent: "menu.reorder", items: JSON.stringify(items) }, { method: "post" })
+            }
+          />
+        </div>
+      ) : (
+        <>
+          <ProfileSection />
+          <NotificationSection />
+          <DangerZoneSection />
+        </>
+      )}
     </div>
   )
 }

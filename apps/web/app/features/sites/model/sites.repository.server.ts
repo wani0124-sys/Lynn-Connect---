@@ -26,7 +26,14 @@ interface InspectionRow {
   title: string
   inspector_org: string
   inspected_at: string
+  inspected_at_end: string | null
+  inspection_time: string | null
   result: string
+  purpose: string | null
+  inspectors: string | null
+  content: string | null
+  result_detail: string | null
+  findings: string | null
   next_inspection_at: string | null
   requires_reinspection: boolean
   note: string | null
@@ -57,7 +64,14 @@ function toInspection(row: InspectionRow, attachments: AttachmentRow[]): SiteIns
     title: row.title,
     inspectorOrg: row.inspector_org,
     inspectedAt: row.inspected_at,
+    inspectedAtEnd: row.inspected_at_end,
+    inspectionTime: row.inspection_time,
     result: row.result,
+    purpose: row.purpose,
+    inspectors: row.inspectors,
+    content: row.content,
+    resultDetail: row.result_detail,
+    findings: row.findings,
     nextInspectionAt: row.next_inspection_at,
     requiresReinspection: row.requires_reinspection,
     note: row.note,
@@ -244,7 +258,14 @@ interface CreateInspectionInput {
   title: string
   inspectorOrg: string
   inspectedAt: string
+  inspectedAtEnd: string | null
+  inspectionTime: string | null
   result: string
+  purpose: string | null
+  inspectors: string | null
+  content: string | null
+  resultDetail: string | null
+  findings: string | null
   nextInspectionAt: string | null
   requiresReinspection: boolean
   note: string | null
@@ -280,7 +301,14 @@ export async function createInspection(input: CreateInspectionInput): Promise<Si
       title: input.title,
       inspector_org: input.inspectorOrg,
       inspected_at: input.inspectedAt,
+      inspected_at_end: input.inspectedAtEnd,
+      inspection_time: input.inspectionTime,
       result: input.result,
+      purpose: input.purpose,
+      inspectors: input.inspectors,
+      content: input.content,
+      result_detail: input.resultDetail,
+      findings: input.findings,
       next_inspection_at: input.nextInspectionAt,
       requires_reinspection: input.requiresReinspection,
       note: input.note,
@@ -308,6 +336,58 @@ export async function createInspection(input: CreateInspectionInput): Promise<Si
   }
 
   return toInspection(row as InspectionRow, attachmentRows.map((r) => ({ id: r.id, filename: r.filename, mime_type: r.mime_type })))
+}
+
+interface UpdateInspectionInput {
+  title: string
+  inspectorOrg: string
+  inspectedAt: string
+  inspectedAtEnd: string | null
+  inspectionTime: string | null
+  result: string
+  purpose: string | null
+  inspectors: string | null
+  content: string | null
+  resultDetail: string | null
+  findings: string | null
+  nextInspectionAt: string | null
+  requiresReinspection: boolean
+  note: string | null
+  updatedBy: string
+  newAttachments: { filename: string; mimeType: string | null; content: Buffer }[]
+}
+
+export async function updateInspection(id: string, input: UpdateInspectionInput): Promise<SiteInspection> {
+  const { error: updateError } = await getSupabaseServerClient()
+    .from(TABLE_INSPECTIONS)
+    .update({
+      title: input.title,
+      inspector_org: input.inspectorOrg,
+      inspected_at: input.inspectedAt,
+      inspected_at_end: input.inspectedAtEnd,
+      inspection_time: input.inspectionTime,
+      result: input.result,
+      purpose: input.purpose,
+      inspectors: input.inspectors,
+      content: input.content,
+      result_detail: input.resultDetail,
+      findings: input.findings,
+      next_inspection_at: input.nextInspectionAt,
+      requires_reinspection: input.requiresReinspection,
+      note: input.note,
+      updated_by: input.updatedBy,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+  if (updateError) throw new Error(`점검 기록을 수정하지 못했습니다: ${updateError.message}`)
+
+  for (const attachment of input.newAttachments) {
+    await addInspectionAttachment(id, attachment)
+  }
+
+  const updated = await getInspectionById(id)
+  if (!updated) throw new Error("수정된 점검 기록을 불러오지 못했습니다.")
+  return updated
 }
 
 export async function deleteInspection(id: string): Promise<void> {

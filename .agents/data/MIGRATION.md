@@ -223,6 +223,10 @@ Approval:
 | 날짜 | 파일/버전 | 변경 요약 | 영향 범위 | 롤백 |
 |---|---|---|---|---|
 | YYYY-MM-DD | `<migration-file>` | `<summary>` | `<tables/apis>` | `<rollback>` |
+| 2026-07-14 (작성) / 2026-07-15 (적용) | `20260714090509_add_site_inspection_report_fields.sql` | site_inspections에 결과보고 양식 필드 7개(inspected_at_end/inspection_time/purpose/inspectors/content/result_detail/findings) 추가 | site_inspections 테이블, /sites(점검 기록 추가 모달), /sites/:siteId/inspections/:inspectionId/print | simple rollback(전부 nullable additive column, drop column으로 원복 가능). 작성 후 미적용 상태로 남아있다가 "점검 기록 저장 실패(content 컬럼 없음)" 오류로 발견, 사용자 승인 후 2026-07-15 production Supabase에 적용 완료. |
+| 2026-07-15 | `20260715005123_add_members_table.sql` | 인메모리 seedMembers(서버 재시작 시 저장/삭제 내역 유실)를 members 테이블로 이관. password_hash(scrypt) 컬럼 신설, sites 삭제 시 managed_site_ids 정리 트리거 추가 | members 테이블 신설, /members, /login, /change-password, credentials.server.ts, session.server.ts | simple rollback(신규 테이블/트리거 제거로 원상복구 가능하나, 적용 후에는 DB가 유일한 저장소이므로 적용 전 되돌리려면 앱 코드를 함께 되돌려야 한다). 사용자 승인 후 2026-07-15 production Supabase(session pooler 경유, DB 비밀번호 사용자 제공)에 적용 완료. 시드 계정 6건 정상 삽입 확인. |
+| 2026-07-15 | `20260715060300_add_sidebar_menu_items.sql` | nav.ts 하드코딩 배열을 sidebar_menu_items 테이블로 이관. 2단계 고정(그룹/리프) 강제 트리거 추가, 기존 5개 화면을 시드 | sidebar_menu_items 테이블 신설, /settings(메뉴 관리 탭), /_app(사이드바 렌더) | simple rollback(신규 테이블/트리거 제거 가능, _app.tsx는 DB 조회 실패 시 정적 nav.ts로 자동 폴백하므로 서비스 중단 위험 낮음). 사용자 승인 후 2026-07-15 production Supabase(session pooler 경유)에 적용 완료. 시드 5건 정상 삽입 확인. |
+| 2026-07-16 | `20260716070000_add_document_revision_attachments.sql` | document_revisions에 종속된 추가 첨부파일(서브 파일) 테이블 신설. 메인 PDF와 별개로 여러 개 첨부, 같은 document-revisions 버킷의 별도 경로에 저장 | document_revision_attachments 테이블 신설, /documents(새 리비전 업로드 모달의 "추가 첨부파일" 필드, 리비전 이력의 서브 파일 목록) | simple rollback(신규 테이블 제거만으로 원복 가능, 전부 additive). 사용자 승인 후 2026-07-16 production Supabase(SQL Editor)에 적용 완료. |
 
 ---
 

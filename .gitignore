@@ -20,3 +20,6 @@ coverage/
 .DS_Store
 Thumbs.db
 *.log
+
+# 실명/실제 공문·대화가 담긴 예시 이미지(대외기관 점검 기준 안내). public 저장소에 올리지 않는다.
+apps/web/public/inspection-guide/

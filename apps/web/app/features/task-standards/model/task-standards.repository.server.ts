@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { getSupabaseServerClient } from "~/shared/lib/supabase.server"
+import { formatSenderName } from "~/entities/task-standard/lib/format-sender-name"
 import type {
   StandardAttachment,
   StandardCategory,
@@ -73,7 +74,7 @@ function toPost(row: PostRow, attachments: AttachmentRow[]): StandardPost {
     departmentId: row.department_id,
     categoryId: row.category_id,
     senderEmail: row.sender_email,
-    senderName: row.sender_name,
+    senderName: formatSenderName(row.sender_name),
     sentAt: row.sent_at,
     bodyHtml: row.body_html,
     bodyText: row.body_text,
@@ -361,7 +362,7 @@ export async function listPosts(params: ListPostsParams = {}): Promise<StandardP
     title: row.title,
     departmentId: row.department_id,
     categoryId: row.category_id,
-    senderName: row.sender_name,
+    senderName: formatSenderName(row.sender_name),
     sentAt: row.sent_at,
     createdAt: row.created_at,
     departmentName: row.department_id ? (deptMap.get(row.department_id)?.name ?? null) : null,
