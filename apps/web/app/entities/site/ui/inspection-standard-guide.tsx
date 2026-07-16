@@ -36,7 +36,7 @@ export function InspectionStandardGuide() {
       <div className="rounded-t-lg bg-muted px-5 py-3 text-center">
         <h2 className="text-base font-bold">대외 주요기관 점검 발생 시 대응 기준</h2>
       </div>
-      <CardContent className="grid gap-8 pt-6 md:grid-cols-3">
+      <CardContent className="grid gap-10 pt-6 md:grid-cols-3">
         {STAGES.map((stage, index) => {
           const Icon = stage.icon
           return (
@@ -54,19 +54,21 @@ export function InspectionStandardGuide() {
                 <span>{stage.note}</span>
               </div>
 
-              <div className="relative mt-1 overflow-hidden rounded-lg shadow-sm">
+              <div className="mt-1">
                 <img
                   src={stage.example.src}
                   alt={stage.example.caption}
-                  className="aspect-[4/5] w-full object-cover object-top"
+                  className="h-auto w-full rounded-md border border-border/20"
                 />
-                <p className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-6 text-xs text-white">
-                  {stage.example.caption}
-                </p>
+                <p className="mt-2 text-center text-xs text-muted-foreground">{stage.example.caption}</p>
               </div>
 
               {index < STAGES.length - 1 ? (
-                <ArrowRight className="absolute top-3 -right-6 hidden size-5 text-muted-foreground md:block" aria-hidden />
+                <div className="absolute top-1/2 -right-8 hidden -translate-y-1/2 md:block">
+                  <span className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <ArrowRight className="size-4" aria-hidden />
+                  </span>
+                </div>
               ) : null}
             </div>
           )
