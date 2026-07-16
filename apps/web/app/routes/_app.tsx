@@ -2,12 +2,7 @@ import { useState } from "react"
 import { Form, Link, NavLink, Outlet, redirect, useLoaderData, type LoaderFunctionArgs } from "react-router"
 import { Bell, ChevronDown, LogOut, Menu, PanelLeft, PanelLeftClose, Waypoints } from "lucide-react"
 import { buildMenuTree } from "~/entities/sidebar-menu/lib/build-menu-tree"
-import {
-  SIDEBAR_MENU_GROUP_ICON,
-  SIDEBAR_MENU_ROUTE_ICON,
-  type RenderNavNode,
-  type SidebarMenuRoute,
-} from "~/entities/sidebar-menu/model/sidebar-menu.types"
+import { sidebarMenuRouteIcon, type RenderNavNode } from "~/entities/sidebar-menu/model/sidebar-menu.types"
 import { MEMBER_ROLE_LABEL } from "~/entities/member/model/member"
 import { requireUser } from "~/features/auth/model/session.server"
 import { listMenuItems } from "~/features/sidebar-menu/model/sidebar-menu.repository.server"
@@ -17,13 +12,9 @@ import { useUiLayoutStore } from "~/shared/store/ui-layout.store"
 import { Button } from "~/shared/ui/button"
 import { Input } from "~/shared/ui/input"
 
-function navIcon(route: SidebarMenuRoute | null) {
-  return route ? SIDEBAR_MENU_ROUTE_ICON[route] : SIDEBAR_MENU_GROUP_ICON
-}
-
 // 정적 nav.ts 배열을 렌더 트리 모양으로 맞춘다(DB 조회 실패 시 fallback으로 사용).
 function fromStaticNavItems(items: typeof navItems): RenderNavNode[] {
-  return items.map((item) => ({ key: item.to, label: item.label, route: item.to as SidebarMenuRoute, children: [] }))
+  return items.map((item) => ({ key: item.to, label: item.label, route: item.to, children: [] }))
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -84,7 +75,7 @@ function NavLinkRow({
   onNavigate?: () => void
   indent?: boolean
 }) {
-  const Icon = navIcon(node.route)
+  const Icon = sidebarMenuRouteIcon(node.route)
   if (!node.route) return null
   return (
     <NavLink
@@ -122,7 +113,7 @@ function NavGroupRow({
   expanded: boolean
   onToggle: () => void
 }) {
-  const Icon = navIcon(node.route)
+  const Icon = sidebarMenuRouteIcon(node.route)
   return (
     <div>
       <button
