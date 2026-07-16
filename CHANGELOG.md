@@ -8,6 +8,25 @@
 
 ---
 
+## [2.6-draft] - 2026-07-16
+
+### 추가
+- **멤버 관리** (`/members`) — 인메모리 `seedMembers`(서버 재시작 시 저장/삭제 유실)를 Supabase `members` 테이블로 이관. 계정 생성/일괄 생성/수정/삭제, 현장별 관리 권한(`managed_site_ids`), 비밀번호는 scrypt 해시로 저장. DB: `supabase/migrations/20260715005123_add_members_table.sql`.
+- **사이드바 메뉴 관리** (`/settings` "메뉴 관리" 탭) — 하드코딩된 `shared/config/nav.ts` 배열을 `sidebar_menu_items` 테이블로 이관. 제목·순서·상위/하위 그룹(2단계 고정)·배치(주 메뉴/관리 메뉴)를 본사 권한으로 편집. 각 화면 `PageHeader` 제목과 대시보드 위젯 제목도 `usePageMenuTitle` 훅으로 메뉴 라벨과 동기화. DB: `supabase/migrations/20260715060300_add_sidebar_menu_items.sql`.
+- **현장 점검 결과보고 확장** (`/sites`) — 점검 기록에 점검취지/점검자/점검내용/결과상세/지적사항 등 결과보고 양식 필드 추가, 점검 기록 수정(update) API 신설, 결과보고 양식 인쇄 전용 화면(`/sites/:siteId/inspections/:inspectionId/print`) 추가. 상위 탭을 "점검 프로세스"(대외기관 점검 대응 기준 고정 안내) / "현장 점검결과"(현장별 점검 이력) / "AI 분석" 3개로 재구성. DB: `supabase/migrations/20260714090509_add_site_inspection_report_fields.sql`.
+- **현장 점검 AI 문답** ("AI 분석" 탭) — 전체 현장의 점검 기록을 근거로 Claude(`claude-haiku-4-5`)와 채팅형으로 질문/답변(멀티턴). 법령 확인이 필요한 질문은 `web_search` 도구로 국가법령정보센터(law.go.kr)를 검색해 근거 조문을 인용. 시작 시 "대화는 저장되지 않음" 안내 팝업, 인쇄(새 창 출력) 버튼, 실패 시 재시도 버튼 제공. 신규 의존성: `@anthropic-ai/sdk`(`ANTHROPIC_API_KEY` 필요), `zod` 3.25로 업그레이드.
+- **문서 리비전 첨부파일 확장** (`/documents`) — 메인 PDF(diff 비교 대상)와 별개로 여러 개의 참고용 서브 파일을 첨부할 수 있게 확장, 리비전 이력에서 메인/서브 구분 표시. DB: `supabase/migrations/20260716070000_add_document_revision_attachments.sql`.
+- **작업지시서 스캐폴드** (`/work-orders`) — 사이드바 메뉴가 가리킬 수 있는 고정 화면을 5개→6개로 확장. 라우트/메뉴만 있고 실제 기능(본사가 현장에 작업 지시를 발령하는 구조)은 후속 작업에서 구현 예정. DB: `supabase/migrations/20260716090000_add_work_orders_menu_route.sql`.
+- 사이드바 상위 탭(폴더 형태)과 하위 탭(알약 형태)을 구분하는 `Tabs` `variant` 옵션 추가, 사이드바 최상위 메뉴(그룹/최상위 링크) 폰트를 크고 굵게 강조.
+
+### 보안
+- 데모 계정 비밀번호 해시를 사전 단어 기반 값 대신 무작위 값으로 교체.
+
+### 변경
+- `apps/web/README.md`의 예전 데모 계정표(고정 이메일/평문 비밀번호 안내)를 제거하고, 실제 계정은 Supabase에서 관리하며 로그인 정보는 문서에 남기지 않는다는 안내로 대체.
+
+---
+
 ## [2.5-draft] - 2026-07-13
 
 ### 추가
