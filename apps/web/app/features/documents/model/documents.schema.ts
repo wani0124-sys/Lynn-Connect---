@@ -16,3 +16,10 @@ export function validateRevisionFile(file: File): string | null {
   if (file.size > MAX_REVISION_FILE_SIZE_BYTES) return "파일 크기는 30MB를 넘을 수 없습니다."
   return null
 }
+
+// 추가 첨부파일(서브 파일)은 메인 파일과 달리 PDF로 제한하지 않는다.
+export function validateRevisionAttachmentFile(file: File): string | null {
+  if (file.size === 0) return "파일을 선택해 주세요."
+  if (file.size > MAX_REVISION_FILE_SIZE_BYTES) return "파일 크기는 30MB를 넘을 수 없습니다."
+  return null
+}

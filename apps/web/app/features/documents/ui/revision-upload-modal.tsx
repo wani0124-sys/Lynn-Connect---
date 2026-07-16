@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from "react"
 import { useFetcher } from "react-router"
-import { FileText } from "lucide-react"
+import { FileText, Paperclip, X } from "lucide-react"
 import { cn } from "~/shared/lib/cn"
 import { Button } from "~/shared/ui/button"
 import { Field } from "~/shared/ui/field"
@@ -24,8 +24,10 @@ export function RevisionUploadModal({ open, onClose, seriesId, nextRevisionLabel
   const [revisionLabel, setRevisionLabel] = useState(nextRevisionLabel)
   const [effectiveDate, setEffectiveDate] = useState("")
   const [file, setFile] = useState<File | null>(null)
+  const [attachments, setAttachments] = useState<File[]>([])
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const attachmentInputRef = useRef<HTMLInputElement>(null)
 
   const pending = fetcher.state !== "idle"
   const error = fetcher.data?.error
@@ -38,7 +40,13 @@ export function RevisionUploadModal({ open, onClose, seriesId, nextRevisionLabel
     setRevisionLabel(nextRevisionLabel)
     setEffectiveDate("")
     setFile(null)
+    setAttachments([])
     setDragOver(false)
+  }
+
+  function addAttachments(list: FileList | null) {
+    if (!list) return
+    setAttachments((prev) => [...prev, ...Array.from(list)])
   }
 
   function pickFile(candidate: File | undefined) {
@@ -66,6 +74,7 @@ export function RevisionUploadModal({ open, onClose, seriesId, nextRevisionLabel
     formData.append("revisionLabel", revisionLabel.trim())
     formData.append("effectiveDate", effectiveDate)
     formData.append("file", file)
+    for (const att of attachments) formData.append("attachments", att)
     fetcher.submit(formData, { method: "post", encType: "multipart/form-data" })
   }
 
@@ -104,7 +113,7 @@ export function RevisionUploadModal({ open, onClose, seriesId, nextRevisionLabel
           </Field>
         </div>
 
-        <Field label="PDF 파일" htmlFor="rev-file" required>
+        <Field label="메인 파일 (PDF)" htmlFor="rev-file" required>
           <div
             onClick={() => inputRef.current?.click()}
             onDragOver={(e) => {
@@ -124,7 +133,7 @@ export function RevisionUploadModal({ open, onClose, seriesId, nextRevisionLabel
             ) : (
               <>
                 <p className="text-sm text-foreground">클릭하거나 PDF 파일을 드래그하세요</p>
-                <p className="text-xs text-muted-foreground">PDF 파일 1개만 업로드할 수 있습니다</p>
+                <p className="text-xs text-muted-foreground">화면에 표시·비교되는 메인 파일입니다. PDF 1개만 가능합니다</p>
               </>
             )}
             <input
@@ -140,6 +149,41 @@ export function RevisionUploadModal({ open, onClose, seriesId, nextRevisionLabel
             />
           </div>
         </Field>
+
+        <Field label="추가 첨부파일 (선택)" htmlFor="rev-attachments">
+          <input
+            ref={attachmentInputRef}
+            id="rev-attachments"
+            type="file"
+            multiple
+            onChange={(e) => {
+              addAttachments(e.target.files)
+              e.target.value = ""
+            }}
+            className="block w-full text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">메인 파일 외에 참고용으로 함께 올리는 서브 파일입니다. 형식 제한 없음</p>
+        </Field>
+
+        {attachments.length > 0 ? (
+          <ul className="divide-y divide-border rounded-md border border-border">
+            {attachments.map((att, index) => (
+              <li key={`${att.name}-${index}`} className="flex items-center gap-2 p-2 text-sm">
+                <Paperclip className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="min-w-0 flex-1 truncate">{att.name}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="제거"
+                  onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
+                >
+                  <X className="size-4" aria-hidden />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
     </Modal>
   )

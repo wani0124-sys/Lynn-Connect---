@@ -2,7 +2,12 @@ import { useState } from "react"
 import { Form, Link, NavLink, Outlet, redirect, useLoaderData, type LoaderFunctionArgs } from "react-router"
 import { Bell, ChevronDown, LogOut, Menu, PanelLeft, PanelLeftClose, Waypoints } from "lucide-react"
 import { buildMenuTree } from "~/entities/sidebar-menu/lib/build-menu-tree"
-import { SIDEBAR_MENU_GROUP_ICON, SIDEBAR_MENU_ROUTE_ICON, type SidebarMenuRoute } from "~/entities/sidebar-menu/model/sidebar-menu.types"
+import {
+  SIDEBAR_MENU_GROUP_ICON,
+  SIDEBAR_MENU_ROUTE_ICON,
+  type RenderNavNode,
+  type SidebarMenuRoute,
+} from "~/entities/sidebar-menu/model/sidebar-menu.types"
 import { MEMBER_ROLE_LABEL } from "~/entities/member/model/member"
 import { requireUser } from "~/features/auth/model/session.server"
 import { listMenuItems } from "~/features/sidebar-menu/model/sidebar-menu.repository.server"
@@ -11,15 +16,6 @@ import { navItems, secondaryNavItems } from "~/shared/config/nav"
 import { useUiLayoutStore } from "~/shared/store/ui-layout.store"
 import { Button } from "~/shared/ui/button"
 import { Input } from "~/shared/ui/input"
-
-// loader가 반환하는 값은 클라이언트로 직렬화되어 전달된다(turbo-stream) — 아이콘 컴포넌트(함수)는
-// 직렬화할 수 없으므로 route(문자열)만 담고, 실제 아이콘 컴포넌트는 클라이언트 렌더 시점에 조회한다.
-interface RenderNavNode {
-  key: string
-  label: string
-  route: SidebarMenuRoute | null
-  children: RenderNavNode[]
-}
 
 function navIcon(route: SidebarMenuRoute | null) {
   return route ? SIDEBAR_MENU_ROUTE_ICON[route] : SIDEBAR_MENU_GROUP_ICON

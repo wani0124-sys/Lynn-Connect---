@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { buildMenuTree } from "~/entities/sidebar-menu/lib/build-menu-tree"
+import { usePageMenuTitle } from "~/entities/sidebar-menu/lib/use-page-menu-title"
 import { isHeadquarters } from "~/entities/member/model/member"
 import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
 import {
@@ -124,10 +125,11 @@ export default function SettingsRoute() {
   }
 
   const tree = buildMenuTree(menuItems)
+  const pageTitle = usePageMenuTitle("/settings", "설정")
 
   return (
     <div className="space-y-6">
-      <PageHeader title="설정" description="프로필, 알림, 계정, 사이드바 메뉴 관련 설정을 관리합니다." />
+      <PageHeader title={pageTitle} description="프로필, 알림, 계정, 사이드바 메뉴 관련 설정을 관리합니다." />
 
       {canManage ? (
         <Tabs

@@ -1,16 +1,18 @@
 import { useState } from "react"
 import { data, useFetcher, useLoaderData, useSearchParams, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
-import { ChevronDown, ChevronUp, Download, FileWarning, Plus, Settings2, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronUp, Download, FileWarning, Paperclip, Plus, Settings2, Trash2 } from "lucide-react"
 import { DiffView } from "~/entities/document/ui/diff-view"
 import { PdfPageViewer } from "~/entities/document/ui/pdf-page-viewer"
 import type { DocumentRevision } from "~/entities/document/model/document.types"
 import { isHeadquarters } from "~/entities/member/model/member"
+import { usePageMenuTitle } from "~/entities/sidebar-menu/lib/use-page-menu-title"
 import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
 import {
   createRevision,
   createSeries,
   deleteRevision,
   deleteSeries,
+  getRevisionAttachmentDownloadUrl,
   getRevisionFileUrl,
   getSeriesById,
   listRevisions,
@@ -18,7 +20,12 @@ import {
   renameSeries,
   reorderSeries,
 } from "~/features/documents/model/documents.repository.server"
-import { validateRevisionFile, validateRevisionLabel, validateSeriesName } from "~/features/documents/model/documents.schema"
+import {
+  validateRevisionAttachmentFile,
+  validateRevisionFile,
+  validateRevisionLabel,
+  validateSeriesName,
+} from "~/features/documents/model/documents.schema"
 import { RevisionUploadModal } from "~/features/documents/ui/revision-upload-modal"
 import { SeriesManageModal } from "~/features/documents/ui/series-manage-modal"
 import { formatDateTime } from "~/shared/lib/format"
@@ -50,6 +57,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     let revisions: DocumentRevision[] = []
     let fileUrls: Record<string, string> = {}
+    let attachmentUrls: Record<string, string> = {}
     if (selectedSeries) {
       revisions = await listRevisions(selectedSeries.id)
       if (revisions.length > 0) {
@@ -57,10 +65,26 @@ export async function loader({ request }: LoaderFunctionArgs) {
           revisions.map(async (rev) => [rev.id, (await getRevisionFileUrl(rev.id))?.url ?? null] as const),
         )
         fileUrls = Object.fromEntries(entries.filter((entry): entry is [string, string] => entry[1] !== null))
+
+        const allAttachments = revisions.flatMap((rev) => rev.attachments)
+        if (allAttachments.length > 0) {
+          const attEntries = await Promise.all(
+            allAttachments.map(async (att) => [att.id, (await getRevisionAttachmentDownloadUrl(att.id))?.url ?? null] as const),
+          )
+          attachmentUrls = Object.fromEntries(attEntries.filter((entry): entry is [string, string] => entry[1] !== null))
+        }
       }
     }
 
-    return { series, selectedSeries, revisions, fileUrls, canManage: isHeadquarters(user.role), migrationPending: false }
+    return {
+      series,
+      selectedSeries,
+      revisions,
+      fileUrls,
+      attachmentUrls,
+      canManage: isHeadquarters(user.role),
+      migrationPending: false,
+    }
   } catch (error) {
     console.error("문서 정보를 불러오지 못했습니다(마이그레이션 미적용 가능성):", error)
     return {
@@ -68,6 +92,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       selectedSeries: null,
       revisions: [],
       fileUrls: {},
+      attachmentUrls: {},
       canManage: isHeadquarters(user.role),
       migrationPending: true,
     }
@@ -118,7 +143,21 @@ export async function action({ request }: ActionFunctionArgs) {
         const fileError = validateRevisionFile(file)
         if (fileError) return data({ error: fileError }, { status: 400 })
 
+        const attachmentFiles = form.getAll("attachments").filter((f): f is File => f instanceof File && f.size > 0)
+        for (const att of attachmentFiles) {
+          const attError = validateRevisionAttachmentFile(att)
+          if (attError) return data({ error: `${att.name}: ${attError}` }, { status: 400 })
+        }
+
         const buffer = Buffer.from(await file.arrayBuffer())
+        const attachments = await Promise.all(
+          attachmentFiles.map(async (att) => ({
+            filename: att.name,
+            mimeType: att.type || null,
+            content: Buffer.from(await att.arrayBuffer()),
+          })),
+        )
+
         await createRevision({
           seriesId,
           revisionLabel,
@@ -127,6 +166,7 @@ export async function action({ request }: ActionFunctionArgs) {
           mimeType: file.type || "application/pdf",
           content: buffer,
           uploadedBy: user.id,
+          attachments,
         })
         return { ok: true }
       }
@@ -145,7 +185,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function DocumentsRoute() {
-  const { series, selectedSeries, revisions, fileUrls, canManage, migrationPending } = useLoaderData<typeof loader>()
+  const { series, selectedSeries, revisions, fileUrls, attachmentUrls, canManage, migrationPending } = useLoaderData<typeof loader>()
   const [searchParams, setSearchParams] = useSearchParams()
   const actionFetcher = useFetcher<typeof action>()
   const deleteFetcher = useFetcher<typeof action>()
@@ -155,6 +195,7 @@ export default function DocumentsRoute() {
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const [expandedDiffId, setExpandedDiffId] = useState<string | null>(null)
 
+  const pageTitle = usePageMenuTitle("/documents", "문서 관리")
   const sorted = [...series].sort((a, b) => a.sortOrder - b.sortOrder)
   const actionError =
     actionFetcher.data && "error" in actionFetcher.data
@@ -175,7 +216,7 @@ export default function DocumentsRoute() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="문서 관리"
+        title={pageTitle}
         description="현장에 안내하는 반복 개정 문서(체크리스트 등)를 리비전별로 관리하고, 이전 버전과의 변경사항을 비교합니다"
         actions={
           canManage && !migrationPending ? (
@@ -286,6 +327,42 @@ export default function DocumentsRoute() {
                                   {rev.effectiveDate ? `시행일 ${formatDateTime(rev.effectiveDate)} · ` : ""}
                                   업로드 {formatDateTime(rev.createdAt)}
                                 </p>
+                                <p className="flex items-center gap-1.5 text-sm">
+                                  <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">메인</span>
+                                  {fileUrls[rev.id] ? (
+                                    <a
+                                      href={fileUrls[rev.id]}
+                                      download={rev.filename}
+                                      className="inline-flex items-center gap-1 truncate text-primary hover:underline"
+                                    >
+                                      {rev.filename}
+                                    </a>
+                                  ) : (
+                                    <span className="truncate text-muted-foreground">{rev.filename}</span>
+                                  )}
+                                </p>
+                                {rev.attachments.length > 0 ? (
+                                  <ul className="space-y-1">
+                                    {rev.attachments.map((att) => (
+                                      <li key={att.id} className="flex items-center gap-1.5 text-sm">
+                                        <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">서브</span>
+                                        <Paperclip className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                                        {attachmentUrls[att.id] ? (
+                                          <a
+                                            href={attachmentUrls[att.id]}
+                                            download={att.filename}
+                                            className="inline-flex items-center gap-1 truncate text-primary hover:underline"
+                                          >
+                                            {att.filename}
+                                            <Download className="size-3.5 shrink-0" aria-hidden />
+                                          </a>
+                                        ) : (
+                                          <span className="truncate text-muted-foreground">{att.filename}</span>
+                                        )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : null}
                               </div>
                               <div className="flex items-center gap-1">
                                 {fileUrls[rev.id] ? (

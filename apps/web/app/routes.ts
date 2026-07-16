@@ -5,7 +5,7 @@ export default [
   route("logout", "routes/logout.tsx"),
   route("change-password", "routes/change-password.tsx"),
   route("sites/:siteId/inspections/:inspectionId/print", "routes/inspection-print.tsx"),
-  layout("routes/_app.tsx", [
+  layout("routes/_app.tsx", { id: "app-layout" }, [
     index("routes/dashboard.tsx"),
     route("standards", "routes/standards.tsx"),
     route("standards/new", "routes/standards-new.tsx"),

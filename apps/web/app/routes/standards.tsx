@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { Link, data, useFetcher, useLoaderData, useSearchParams, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
 import { Plus, Search, Settings2 } from "lucide-react"
 import { isHeadquarters } from "~/entities/member/model/member"
+import { usePageMenuTitle } from "~/entities/sidebar-menu/lib/use-page-menu-title"
 import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
 import {
   bulkDeletePosts,
@@ -215,10 +216,12 @@ export default function StandardsRoute() {
     setSelectedIds((prev) => (prev.size === postList.rows.length ? new Set() : new Set(postList.rows.map((row) => row.id))))
   }
 
+  const pageTitle = usePageMenuTitle("/standards", "부서별 업무기준 (메일공지)")
+
   return (
     <div className="space-y-4">
       <PageHeader
-        title="부서별 업무기준 (메일공지)"
+        title={pageTitle}
         description="본사 기준·공지 메일을 부서/구분자별로 정리해 공유합니다"
         actions={
           canManage ? (
@@ -244,7 +247,7 @@ export default function StandardsRoute() {
         <div className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{actionError}</div>
       ) : null}
 
-      <Tabs items={deptTabs} value={topDeptTabValue} onChange={(value) => updateParams({ dept: value || null })} />
+      <Tabs variant="folder" items={deptTabs} value={topDeptTabValue} onChange={(value) => updateParams({ dept: value || null })} />
 
       {subDepartments.length > 0 ? (
         <Tabs

@@ -31,3 +31,12 @@ export interface SidebarMenuItem {
 export interface SidebarMenuNode extends SidebarMenuItem {
   children: SidebarMenuItem[]
 }
+
+// _app.tsx의 loader가 클라이언트로 직렬화해 내려주는 렌더용 트리 노드(아이콘 컴포넌트 대신 route 문자열만 담는다).
+// 각 화면의 PageHeader 제목을 사이드바 메뉴 라벨과 동기화할 때도 이 타입을 함께 사용한다.
+export interface RenderNavNode {
+  key: string
+  label: string
+  route: SidebarMenuRoute | null
+  children: RenderNavNode[]
+}

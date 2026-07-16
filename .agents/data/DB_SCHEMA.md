@@ -508,8 +508,8 @@ Indexes: document_revisions_series_id_idx, document_revisions_created_at_idx (cr
 Unique constraints: document_revisions_series_label_key (series_id, revision_label)
 RLS policies: RLS enabled. document_revisions_no_direct_access(전체 거부, anon/authenticated).
 RPC/functions: 없음
-Related APIs: apps/web/app/routes/document-detail.tsx (loader: listRevisions, action: intent=revision.create/revision.delete) — apps/web/app/features/documents/model/documents.parser.server.ts(extractPdfText/computeLineDiff)를 통해 diff를 계산한다.
-Related frontend screens: /documents/:seriesId (리비전 이력 목록, 새 리비전 업로드 모달, 리비전별 diff 펼쳐보기)
+Related APIs: apps/web/app/routes/documents.tsx (loader: listRevisions, action: intent=revision.create/revision.delete) — apps/web/app/features/documents/model/documents.parser.server.ts(extractPdfText/computeLineDiff)를 통해 diff를 계산한다.
+Related frontend screens: /documents (문서 시리즈 탭, 리비전 이력 목록, 새 리비전 업로드 모달, 리비전별 diff 펼쳐보기)
 Migration file: supabase/migrations/20260713100000_document_revisions.sql
 Notes:
   - diff는 PDF 표(셀) 구조가 아니라 추출된 순수 텍스트를 줄 단위로 비교한 결과다 — PDF마다 표 렌더링 구조가 달라 셀 단위 정밀 diff는 범위에서 제외했다(사용자 확인 후 결정, 2026-07-13).
@@ -517,5 +517,28 @@ Notes:
   - 수정(edit) API는 없다 — 잘못 업로드한 리비전은 삭제 후 재업로드한다.
   - Storage 버킷 document-revisions는 private(public=false)이며 서버가 service role key로만 업로드하고 다운로드는 signed URL(TTL 300초)로 발급한다.
   - extracted_text는 리비전마다 원문 전체를 저장하므로 문서가 많아지면 테이블 크기가 커질 수 있다(monitoring candidate). 필요 시 오래된 리비전의 extracted_text를 null로 비우고 diff_json만 남기는 정리 정책을 고려한다.
-  - 이 migration은 작성 시점(2026-07-13) 기준 실제 Supabase 프로젝트에 아직 적용되지 않았다 — 적용 전에는 /documents 관련 화면이 "Could not find the table" 오류로 500을 반환한다.
+  - 2026-07-16 document_revision_attachments 추가 — 메인 파일(PDF, diff 대상)과 별개로 참고용 서브 파일을 여러 개 첨부할 수 있다.
+
+Schema: public
+Table: document_revision_attachments
+Purpose: document_revisions에 종속된 추가 첨부파일(서브 파일) 메타. 메인 파일과 달리 형식 제한이 없고 diff 계산에 쓰이지 않는다. 실제 파일 바이너리는 document_revisions와 같은 Storage 버킷 document-revisions의 revisions/{revisionId}/attachments/ 경로에 저장한다.
+Columns:
+  id uuid
+  revision_id uuid (FK, on delete cascade)
+  filename text
+  storage_path text
+  mime_type text (nullable)
+  created_at timestamptz
+Primary key: id
+Foreign keys: revision_id -> document_revisions(id) on delete cascade
+Indexes: document_revision_attachments_revision_id_idx
+Unique constraints: 없음
+RLS policies: RLS enabled. document_revision_attachments_no_direct_access(전체 거부, anon/authenticated).
+RPC/functions: 없음
+Related APIs: apps/web/app/routes/documents.tsx (action: intent=revision.create에서 attachments[] 필드로 함께 업로드) — apps/web/app/features/documents/model/documents.repository.server.ts#createRevision/getRevisionAttachmentDownloadUrl
+Related frontend screens: /documents (새 리비전 업로드 모달의 "추가 첨부파일" 필드, 리비전 이력의 서브 파일 목록)
+Migration file: supabase/migrations/20260716070000_add_document_revision_attachments.sql
+Notes:
+  - 리비전 삭제(deleteRevision) 시 첨부파일 storage 객체도 함께 정리한다(removeRevisionFiles가 document_revisions.storage_path와 document_revision_attachments.storage_path를 모두 조회해 일괄 삭제).
+  - 추가/삭제만 가능하고 개별 첨부파일 교체 API는 없다 — document_revisions와 동일하게 리비전 자체를 삭제 후 재업로드한다.
 ```

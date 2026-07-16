@@ -13,6 +13,7 @@ import {
   type MenuPermission,
 } from "~/entities/member/model/member"
 import type { Site } from "~/entities/site/model/site.types"
+import { usePageMenuTitle } from "~/entities/sidebar-menu/lib/use-page-menu-title"
 import { generateTempPassword, hashPassword } from "~/features/auth/model/credentials.server"
 import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
 import { listSites } from "~/features/sites/model/sites.repository.server"
@@ -354,10 +355,12 @@ export default function MembersRoute() {
     )
   }
 
+  const pageTitle = usePageMenuTitle("/members", "멤버 관리")
+
   return (
     <div className="space-y-4">
       <PageHeader
-        title="멤버 관리"
+        title={pageTitle}
         description="본사관리자·현장관리자 계정과 관리 현장 권한을 관리합니다"
         actions={
           canManage ? (

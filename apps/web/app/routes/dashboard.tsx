@@ -5,6 +5,7 @@ import { MEMBER_ROLE_LABEL, type Member } from "~/entities/member/model/member"
 import type { SeriesWithLatestRevision } from "~/entities/document/model/document.types"
 import type { SiteWithLatestInspection } from "~/entities/site/model/site.types"
 import { InspectionResultBadge } from "~/entities/site/ui/inspection-result-badge"
+import { usePageMenuTitle } from "~/entities/sidebar-menu/lib/use-page-menu-title"
 import { requireUser } from "~/features/auth/model/session.server"
 import { listSeriesWithLatestRevision } from "~/features/documents/model/documents.repository.server"
 import { listSitesWithLatestInspection } from "~/features/sites/model/sites.repository.server"
@@ -144,10 +145,11 @@ function StandardsHighlightBanner({
 }: {
   highlight: { label: string; categoryId: number | null; posts: StandardPostListItem[]; total: number }[]
 }) {
+  const title = usePageMenuTitle("/standards", "부서별 업무기준 (메일공지)")
   return (
     <Card className="overflow-hidden">
       <CardHeader className="flex-row items-center justify-between border-b border-border bg-accent pb-5">
-        <CardTitle>부서별 업무기준 (메일공지)</CardTitle>
+        <CardTitle>{title}</CardTitle>
         <Link to="/standards" className="text-sm font-medium text-primary hover:underline">
           전체 보기
         </Link>
@@ -167,10 +169,11 @@ function StandardsHighlightBanner({
 }
 
 function DocumentsHighlightBanner({ documents }: { documents: SeriesWithLatestRevision[] }) {
+  const title = usePageMenuTitle("/documents", "문서 관리")
   return (
     <Card className="overflow-hidden">
       <CardHeader className="flex-row items-center justify-between border-b border-border bg-accent pb-5">
-        <CardTitle>문서 관리</CardTitle>
+        <CardTitle>{title}</CardTitle>
         <Link to="/documents" className="text-sm font-medium text-primary hover:underline">
           전체 보기
         </Link>
@@ -210,10 +213,11 @@ function DocumentsHighlightBanner({ documents }: { documents: SeriesWithLatestRe
 }
 
 function SitesHighlightBanner({ sites }: { sites: SiteWithLatestInspection[] }) {
+  const title = usePageMenuTitle("/sites", "현장 점검")
   return (
     <Card className="overflow-hidden">
       <CardHeader className="flex-row items-center justify-between border-b border-border bg-accent pb-5">
-        <CardTitle>현장 점검</CardTitle>
+        <CardTitle>{title}</CardTitle>
         <Link to="/sites" className="text-sm font-medium text-primary hover:underline">
           전체 보기
         </Link>
