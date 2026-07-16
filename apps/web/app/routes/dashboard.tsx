@@ -11,6 +11,7 @@ import { listSeriesWithLatestRevision } from "~/features/documents/model/documen
 import { listSitesWithLatestInspection } from "~/features/sites/model/sites.repository.server"
 import { listCategories, listPosts } from "~/features/task-standards/model/task-standards.repository.server"
 import type { StandardPostListItem } from "~/entities/task-standard/model/task-standard.types"
+import { cn } from "~/shared/lib/cn"
 import { formatDate } from "~/shared/lib/format"
 import { Card, CardContent, CardHeader, CardTitle } from "~/shared/ui/card"
 import { PageHeader } from "~/shared/ui/page-header"
@@ -53,6 +54,111 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   return { user, standardsHighlight, documentsHighlight, sitesHighlight }
+}
+
+type MissionSlide = {
+  labelEn: string
+  labelKo: string
+  type: "single"
+  lines: string[]
+  sub?: string
+}
+
+type CoreValuesSlide = {
+  labelEn: string
+  labelKo: string
+  type: "columns"
+  columns: { labelEn: string; text: string }[]
+}
+
+const COMPANY_SLIDES: (MissionSlide | CoreValuesSlide)[] = [
+  {
+    labelEn: "MISSION",
+    labelKo: "미션",
+    type: "single",
+    lines: ["우리는 사람·자연·역사에 대한 통찰을 바탕으로", "고객의 꿈과 행복을 위해 더 나은 공간의 가치를 창조한다"],
+  },
+  {
+    labelEn: "VISION",
+    labelKo: "비전",
+    type: "single",
+    lines: ["선도적인 일류 종합부동산 회사"],
+    sub: "PREMIER SPACE & VALUE CREATOR",
+  },
+  {
+    labelEn: "CORE VALUES",
+    labelKo: "핵심가치",
+    type: "columns",
+    columns: [
+      { labelEn: "TRUST", text: "마음을 얻는 신뢰" },
+      { labelEn: "LEARNING", text: "미래를 여는 학습" },
+      { labelEn: "CHALLENGE", text: "최고를 향한 도전" },
+    ],
+  },
+]
+
+const COMPANY_SLIDE_INTERVAL_MS = 5000
+
+// 회사 미션/비전/핵심가치를 일정 주기로 자동 전환하며 보여주는 배너. 대시보드 상단에서 개인 인사 배너보다 먼저 노출한다.
+function CompanyMissionCarousel() {
+  const [index, setIndex] = useState(0)
+  const [paused, setPaused] = useState(false)
+
+  useEffect(() => {
+    if (paused) return
+    const timer = setInterval(() => setIndex((prev) => (prev + 1) % COMPANY_SLIDES.length), COMPANY_SLIDE_INTERVAL_MS)
+    return () => clearInterval(timer)
+  }, [paused])
+
+  const slide = COMPANY_SLIDES[index]
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-lg bg-gradient-to-r from-primary via-primary to-[#0d4d7a] px-6 py-5 text-primary-foreground"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      <div className="flex min-h-16 flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+        <div className="flex shrink-0 items-center gap-3 sm:border-r sm:border-primary-foreground/20 sm:pr-6">
+          <span className="text-xs font-semibold tracking-wider text-primary-foreground/70">{slide.labelEn}</span>
+          <span className="text-base font-bold">{slide.labelKo}</span>
+        </div>
+
+        {slide.type === "single" ? (
+          <div className="min-w-0 flex-1 space-y-1">
+            {slide.lines.map((line) => (
+              <p key={line} className="text-sm font-medium sm:text-base">
+                {line}
+              </p>
+            ))}
+            {slide.sub ? <p className="text-xs font-semibold tracking-wide text-primary-foreground/70">{slide.sub}</p> : null}
+          </div>
+        ) : (
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
+            {slide.columns.map((col) => (
+              <div key={col.labelEn}>
+                <p className="text-xs font-semibold tracking-wider text-primary-foreground/70">{col.labelEn}</p>
+                <p className="text-sm font-bold sm:text-base">{col.text}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex justify-center gap-1.5">
+        {COMPANY_SLIDES.map((s, i) => (
+          <button
+            key={s.labelEn}
+            type="button"
+            aria-label={`${s.labelKo} 슬라이드로 이동`}
+            aria-current={i === index}
+            onClick={() => setIndex(i)}
+            className={cn("size-1.5 rounded-full transition-colors", i === index ? "bg-primary-foreground" : "bg-primary-foreground/30")}
+          />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function DashboardBanner({ user }: { user: Member }) {
@@ -256,6 +362,7 @@ export default function DashboardRoute() {
 
   return (
     <div className="space-y-6">
+      <CompanyMissionCarousel />
       <DashboardBanner user={user} />
 
       <PageHeader title="대시보드" description={`${user.name}님, 환영합니다.`} />
