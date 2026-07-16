@@ -9,6 +9,8 @@ import { isHeadquarters } from "~/entities/member/model/member"
 import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
 import {
   createMenuGroup,
+  createMenuLeaf,
+  deleteCustomMenuLeaf,
   deleteMenuGroup,
   listMenuItems,
   renameMenuItem,
@@ -79,6 +81,18 @@ export async function action({ request }: ActionFunctionArgs) {
       }
       case "menu.deleteGroup": {
         await deleteMenuGroup(Number(form.get("id")))
+        return { ok: true as const }
+      }
+      case "menu.createLeaf": {
+        const label = String(form.get("label") ?? "").trim()
+        const parentId = Number(form.get("parentId"))
+        const placement = String(form.get("placement") ?? "primary") as "primary" | "secondary"
+        if (!label) return data({ error: "하위 메뉴 이름을 입력하세요." }, { status: 400 })
+        await createMenuLeaf(label, parentId, placement)
+        return { ok: true as const }
+      }
+      case "menu.deleteLeaf": {
+        await deleteCustomMenuLeaf(Number(form.get("id")))
         return { ok: true as const }
       }
       case "menu.setParent": {
@@ -153,6 +167,10 @@ export default function SettingsRoute() {
               menuFetcher.submit({ intent: "menu.createGroup", label, placement }, { method: "post" })
             }
             onDeleteGroup={(id) => menuFetcher.submit({ intent: "menu.deleteGroup", id: String(id) }, { method: "post" })}
+            onCreateLeaf={(label, parentId, placement) =>
+              menuFetcher.submit({ intent: "menu.createLeaf", label, parentId: String(parentId), placement }, { method: "post" })
+            }
+            onDeleteLeaf={(id) => menuFetcher.submit({ intent: "menu.deleteLeaf", id: String(id) }, { method: "post" })}
             onSetParent={(id, parentId) =>
               menuFetcher.submit(
                 { intent: "menu.setParent", id: String(id), parentId: parentId !== null ? String(parentId) : "" },

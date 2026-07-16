@@ -440,11 +440,11 @@ Notes:
 
 Schema: public
 Table: sidebar_menu_items
-Purpose: 사이드바 메뉴의 제목/순서/상위-하위(2단계 고정) 구조를 관리자가 설정 화면(메뉴 관리 탭)에서 편집할 수 있게 한다. apps/web/app/shared/config/nav.ts의 하드코딩 배열(navItems/secondaryNavItems)을 대체한다. 2026-07-15 사용자 확인: 메뉴가 가리키는 화면은 기존 5개(부서별 업무기준/현장 점검/문서 관리/멤버 관리/설정)로 고정하고 새 라우트는 추가하지 않는다 → 2026-07-16 사용자 요청으로 "/work-orders"(작업지시서) 추가, 고정 화면 6개로 확장. 새 라우트를 또 추가할 때는 이 값과 apps/web/app/entities/sidebar-menu/model/sidebar-menu.types.ts#SIDEBAR_MENU_ROUTES, 아래 check constraint를 함께 갱신해야 한다.
+Purpose: 사이드바 메뉴의 제목/순서/상위-하위(2단계 고정) 구조를 관리자가 설정 화면(메뉴 관리 탭)에서 편집할 수 있게 한다. apps/web/app/shared/config/nav.ts의 하드코딩 배열(navItems/secondaryNavItems)을 대체한다. 2026-07-15 사용자 확인: 메뉴가 가리키는 화면은 기존 5개(부서별 업무기준/현장 점검/문서 관리/멤버 관리/설정)로 고정하고 새 라우트는 추가하지 않는다 → 2026-07-16 사용자 요청으로 "/work-orders"(작업지시서) 추가, 고정 화면 6개로 확장 → 2026-07-16(같은 날 추가 요청) "그룹을 만들면 그 아래 하위 메뉴도 새로 만들 수 있게 해달라"는 요청으로, 아직 실제 화면이 없는 커스텀 하위 메뉴("/menu/<8자리 hex>")를 관리자가 설정 화면에서 직접 만들 수 있게 확장. 코드로만 추가하는 고정 6개 화면 라우트를 또 추가할 때는 이 값과 apps/web/app/entities/sidebar-menu/model/sidebar-menu.types.ts#SIDEBAR_MENU_ROUTES, 아래 check constraint를 함께 갱신해야 한다.
 Columns:
   id bigint (identity)
   label text
-  route text (nullable) -- null이면 하위 메뉴를 묶는 상위 그룹. 값이 있으면 고정 화면 중 하나('/standards' | '/sites' | '/documents' | '/members' | '/settings' | '/work-orders')
+  route text (nullable) -- null이면 하위 메뉴를 묶는 상위 그룹. 값이 있으면 고정 화면 중 하나('/standards' | '/sites' | '/documents' | '/members' | '/settings' | '/work-orders') 또는 관리자가 만든 커스텀 하위 메뉴('/menu/<8자리 hex>', 아직 실제 화면 없음 — menu-placeholder.tsx가 공통 스캐폴드를 보여줌)
   parent_id bigint (self-FK, on delete set null) -- 그룹 삭제 시 하위 메뉴는 삭제되지 않고 최상위로 승격
   placement text ('primary' | 'secondary', 기본 'primary') -- 사이드바 상단(스크롤 영역) vs 하단(고정 관리 영역)
   sort_order int (기본 0)
@@ -454,18 +454,19 @@ Primary key: id
 Foreign keys: parent_id -> sidebar_menu_items(id) on delete set null
 Indexes: sidebar_menu_items_parent_id_idx, sidebar_menu_items_route_key(unique, route, route is not null인 행만)
 Unique constraints: sidebar_menu_items_route_key(route, partial unique) -- 화면 하나는 메뉴 트리에 한 번만 등장
-Check constraints: route는 고정값 6개만 허용(sidebar_menu_items_route_check), placement는 primary/secondary만 허용, parent_id가 있으면 route가 not null이어야 함(하위 메뉴는 항상 리프)
+Check constraints: route는 고정값 6개 또는 '/menu/<8자리 hex>' 패턴만 허용(sidebar_menu_items_route_check), placement는 primary/secondary만 허용, parent_id가 있으면 route가 not null이어야 함(하위 메뉴는 항상 리프)
 RLS policies: RLS enabled. sidebar_menu_items_no_direct_access(전체 거부, anon/authenticated) — service role로만 접근.
 RPC/functions: enforce_sidebar_menu_items_two_levels() + trigger sidebar_menu_items_two_levels(insert/update) — (1) parent_id가 가리키는 행이 실제 최상위(parent_id is null)인지, (2) 그 행의 route가 null(그룹)인지, (3) placement가 부모와 같은지 검증해 2단계 고정과 상위-하위 배치 일치를 강제한다.
-Related APIs: apps/web/app/routes/settings.tsx (loader/action, intent=menu.*), apps/web/app/routes/_app.tsx (loader에서 사이드바 렌더용 트리 조회) — apps/web/app/features/sidebar-menu/model/sidebar-menu.repository.server.ts를 직접 호출
-Related frontend screens: /settings (메뉴 관리 탭), 전체 화면 공통 사이드바(_app.tsx)
-Migration file: supabase/migrations/20260715060300_add_sidebar_menu_items.sql, supabase/migrations/20260716090000_add_work_orders_menu_route.sql(route check 제약 확장 + "작업지시서" 리프 시드)
+Related APIs: apps/web/app/routes/settings.tsx (loader/action, intent=menu.*), apps/web/app/routes/_app.tsx (loader에서 사이드바 렌더용 트리 조회), apps/web/app/routes/menu-placeholder.tsx (loader에서 커스텀 하위 메뉴 라벨 조회) — apps/web/app/features/sidebar-menu/model/sidebar-menu.repository.server.ts를 직접 호출
+Related frontend screens: /settings (메뉴 관리 탭), 전체 화면 공통 사이드바(_app.tsx), /menu/:slug (커스텀 하위 메뉴 스캐폴드 화면)
+Migration file: supabase/migrations/20260715060300_add_sidebar_menu_items.sql, supabase/migrations/20260716090000_add_work_orders_menu_route.sql(route check 제약 확장 + "작업지시서" 리프 시드), supabase/migrations/20260716120000_allow_custom_sidebar_menu_leaf_routes.sql(커스텀 "/menu/<slug>" 패턴 허용)
 Notes:
   - 그룹 삭제(deleteMenuGroup)는 route가 not null인 리프(고정 화면)에는 적용할 수 없다(where route is null 조건으로 방어). 리프는 항상 어딘가(최상위 또는 그룹 하위)에 남아있어야 한다 — 사용자가 화면 자체를 메뉴에서 완전히 숨기는 기능은 이번 범위에 없다.
   - 최상위 항목의 placement를 바꾸면(setTopLevelMenuItemPlacement) 하위 메뉴도 함께 옮긴다(트리거가 불일치를 거부하기 때문에 repository에서 먼저 자식들을 갱신).
   - _app.tsx의 loader는 이 테이블 조회 실패 시(마이그레이션 미적용 등) apps/web/app/shared/config/nav.ts의 정적 배열로 폴백한다.
   - 그룹은 다른 그룹 아래에 중첩할 수 없다 — 설정 화면의 "상위 메뉴" 드롭다운은 그룹 행에서는 비활성화되어 있다(2단계 고정을 UI 레벨에서도 강제). 리프만 그룹 하위로 옮길 수 있다.
   - "/work-orders"는 스캐폴드 화면(apps/web/app/routes/work-orders.tsx)만 있고 실제 기능(본사가 현장에 작업 지시를 발령하는 구조로 예정)은 아직 없다.
+  - 관리자가 만든 커스텀 하위 메뉴(createMenuLeaf)는 항상 그룹(parentId) 아래에만 만들 수 있고, route는 서버에서 randomUUID 앞 8자리로 자동 생성한다(`/menu/${slug}`). 삭제(deleteCustomMenuLeaf)는 route가 "/menu/"로 시작하는 행에만 적용되어 고정 6개 화면 리프가 실수로 지워지지 않는다. 사이드바에서는 아직 실제 화면이 없다는 표시로 기본 아이콘(FileQuestion, `sidebarMenuRouteIcon` 기본값)을 쓰고, 클릭하면 apps/web/app/routes/menu-placeholder.tsx의 공통 "준비 중" 화면으로 이동한다.
 
 Schema: public
 Table: document_series

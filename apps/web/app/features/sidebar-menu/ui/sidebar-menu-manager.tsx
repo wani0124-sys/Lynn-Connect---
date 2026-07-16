@@ -1,8 +1,7 @@
 import { useState } from "react"
-import { FolderPlus, Pencil, Trash2 } from "lucide-react"
+import { FolderPlus, Pencil, Plus, Trash2 } from "lucide-react"
 import {
-  SIDEBAR_MENU_ROUTE_ICON,
-  SIDEBAR_MENU_GROUP_ICON,
+  sidebarMenuRouteIcon,
   type SidebarMenuItem,
   type SidebarMenuNode,
   type SidebarMenuPlacement,
@@ -14,12 +13,20 @@ import { Input } from "~/shared/ui/input"
 import { Select } from "~/shared/ui/select"
 import { DragHandle, SortableList } from "~/shared/ui/sortable-list"
 
+// 아직 실제 화면이 없는 커스텀 하위 메뉴(관리자가 메뉴 관리에서 즉석으로 만든 항목)는 "/menu/<slug>" 라우트를 쓴다.
+// 이 항목만 화면에서 직접 삭제할 수 있다(고정 6개 화면 리프는 코드/마이그레이션으로만 관리).
+function isCustomLeafRoute(route: string | null): boolean {
+  return route !== null && route.startsWith("/menu/")
+}
+
 export interface SidebarMenuManagerProps {
   tree: Record<SidebarMenuPlacement, SidebarMenuNode[]>
   pending: boolean
   onRename: (id: number, label: string) => void
   onCreateGroup: (label: string, placement: SidebarMenuPlacement) => void
   onDeleteGroup: (id: number) => void
+  onCreateLeaf: (label: string, parentId: number, placement: SidebarMenuPlacement) => void
+  onDeleteLeaf: (id: number) => void
   onSetParent: (id: number, parentId: number | null) => void
   onSetPlacement: (id: number, placement: SidebarMenuPlacement) => void
   onReorderTopLevel: (placement: SidebarMenuPlacement, items: { id: number; sortOrder: number }[]) => void
@@ -34,6 +41,8 @@ export function SidebarMenuManager({
   onRename,
   onCreateGroup,
   onDeleteGroup,
+  onCreateLeaf,
+  onDeleteLeaf,
   onSetParent,
   onSetPlacement,
   onReorderTopLevel,
@@ -53,6 +62,8 @@ export function SidebarMenuManager({
           onRename={onRename}
           onCreateGroup={onCreateGroup}
           onDeleteGroup={onDeleteGroup}
+          onCreateLeaf={onCreateLeaf}
+          onDeleteLeaf={onDeleteLeaf}
           onSetParent={onSetParent}
           onSetPlacement={onSetPlacement}
           onReorderTopLevel={onReorderTopLevel}
@@ -71,6 +82,8 @@ function PlacementSection({
   onRename,
   onCreateGroup,
   onDeleteGroup,
+  onCreateLeaf,
+  onDeleteLeaf,
   onSetParent,
   onSetPlacement,
   onReorderTopLevel,
@@ -103,6 +116,8 @@ function PlacementSection({
                 pending={pending}
                 onRename={onRename}
                 onDeleteGroup={onDeleteGroup}
+                onCreateLeaf={onCreateLeaf}
+                onDeleteLeaf={onDeleteLeaf}
                 onSetParent={onSetParent}
                 onSetPlacement={onSetPlacement}
                 onReorderChildren={onReorderChildren}
@@ -144,6 +159,8 @@ function MenuRow({
   pending,
   onRename,
   onDeleteGroup,
+  onCreateLeaf,
+  onDeleteLeaf,
   onSetParent,
   onSetPlacement,
   onReorderChildren,
@@ -154,12 +171,14 @@ function MenuRow({
   pending: boolean
   onRename: (id: number, label: string) => void
   onDeleteGroup: (id: number) => void
+  onCreateLeaf: (label: string, parentId: number, placement: SidebarMenuPlacement) => void
+  onDeleteLeaf: (id: number) => void
   onSetParent: (id: number, parentId: number | null) => void
   onSetPlacement: (id: number, placement: SidebarMenuPlacement) => void
   onReorderChildren: (parentId: number, items: { id: number; sortOrder: number }[]) => void
 }) {
   const isGroup = node.route === null
-  const Icon = node.route === null ? SIDEBAR_MENU_GROUP_ICON : SIDEBAR_MENU_ROUTE_ICON[node.route]
+  const Icon = sidebarMenuRouteIcon(node.route)
 
   return (
     <div className="p-3">
@@ -214,41 +233,94 @@ function MenuRow({
         ) : null}
       </div>
 
-      {isGroup && node.children.length > 0 ? (
-        <div className="ml-9 mt-2 divide-y divide-border rounded-md border border-border">
-          <SortableList
-            items={node.children}
-            onReorder={(items) => onReorderChildren(node.id, items.map((item, index) => ({ id: item.id, sortOrder: index })))}
-            renderItem={(child, childDrag) => (
-              <div className="flex items-center gap-2 p-2">
-                <DragHandle {...childDrag} />
-                {child.route ? (
-                  (() => {
-                    const ChildIcon = SIDEBAR_MENU_ROUTE_ICON[child.route]
-                    return <ChildIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                  })()
-                ) : null}
-                <div className="min-w-0 flex-1">
-                  <LabelEditor label={child.label} pending={pending} onSave={(label) => onRename(child.id, label)} />
-                </div>
-                <Select
-                  aria-label="상위 메뉴"
-                  value={child.parentId ?? ""}
-                  disabled={pending}
-                  onChange={(e) => onSetParent(child.id, e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">(최상위로 승격)</option>
-                  {allGroups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            )}
-          />
+      {isGroup ? (
+        <div className="ml-9 mt-2 space-y-2">
+          {node.children.length > 0 ? (
+            <div className="divide-y divide-border rounded-md border border-border">
+              <SortableList
+                items={node.children}
+                onReorder={(items) => onReorderChildren(node.id, items.map((item, index) => ({ id: item.id, sortOrder: index })))}
+                renderItem={(child, childDrag) => {
+                  const ChildIcon = sidebarMenuRouteIcon(child.route)
+                  return (
+                    <div className="flex items-center gap-2 p-2">
+                      <DragHandle {...childDrag} />
+                      <ChildIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                      <div className="min-w-0 flex-1">
+                        <LabelEditor label={child.label} pending={pending} onSave={(label) => onRename(child.id, label)} />
+                      </div>
+                      <Select
+                        aria-label="상위 메뉴"
+                        value={child.parentId ?? ""}
+                        disabled={pending}
+                        onChange={(e) => onSetParent(child.id, e.target.value ? Number(e.target.value) : null)}
+                      >
+                        <option value="">(최상위로 승격)</option>
+                        {allGroups.map((group) => (
+                          <option key={group.id} value={group.id}>
+                            {group.label}
+                          </option>
+                        ))}
+                      </Select>
+                      {isCustomLeafRoute(child.route) ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label="하위 메뉴 삭제"
+                          disabled={pending}
+                          onClick={() => onDeleteLeaf(child.id)}
+                        >
+                          <Trash2 className="size-4 text-danger" aria-hidden />
+                        </Button>
+                      ) : null}
+                    </div>
+                  )
+                }}
+              />
+            </div>
+          ) : null}
+          <AddLeafForm parentId={node.id} placement={node.placement} pending={pending} onCreateLeaf={onCreateLeaf} />
         </div>
       ) : null}
+    </div>
+  )
+}
+
+function AddLeafForm({
+  parentId,
+  placement,
+  pending,
+  onCreateLeaf,
+}: {
+  parentId: number
+  placement: SidebarMenuPlacement
+  pending: boolean
+  onCreateLeaf: (label: string, parentId: number, placement: SidebarMenuPlacement) => void
+}) {
+  const [label, setLabel] = useState("")
+
+  return (
+    <div className="flex items-end gap-2">
+      <Input
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        placeholder="새 하위 메뉴 이름 (예: 발주 현황)"
+        className="h-8 flex-1 text-sm"
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pending || !label.trim()}
+        onClick={() => {
+          onCreateLeaf(label.trim(), parentId, placement)
+          setLabel("")
+        }}
+      >
+        <Plus className="size-4" aria-hidden />
+        하위 메뉴 추가
+      </Button>
     </div>
   )
 }
