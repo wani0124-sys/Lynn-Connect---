@@ -175,6 +175,7 @@ function MenuRow({
           aria-label="상위 메뉴"
           value={node.parentId ?? ""}
           disabled={pending || isGroup}
+          title={isGroup ? "그룹은 항상 최상위에 위치하며 다른 그룹 하위로 옮길 수 없습니다." : undefined}
           onChange={(e) => onSetParent(node.id, e.target.value ? Number(e.target.value) : null)}
         >
           <option value="">(최상위)</option>
