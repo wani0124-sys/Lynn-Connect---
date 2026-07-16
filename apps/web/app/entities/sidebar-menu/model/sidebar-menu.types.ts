@@ -1,11 +1,12 @@
-import { ClipboardCheck, ClipboardList, FileText, Settings, Users } from "lucide-react"
+import { ClipboardCheck, ClipboardEdit, ClipboardList, FileText, Settings, Users } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 export type SidebarMenuPlacement = "primary" | "secondary"
 
-// 메뉴가 가리키는 실제 화면은 기존 5개로 고정한다. 새 라우트를 자유롭게 추가하지 않는다
-// (2026-07-15 사용자 확인: 기존 5개 화면만 재배치/제목·순서 변경).
-export const SIDEBAR_MENU_ROUTES = ["/standards", "/sites", "/documents", "/members", "/settings"] as const
+// 메뉴가 가리키는 실제 화면은 고정 목록이다. 새 라우트를 추가하려면 이 배열과 DB의
+// sidebar_menu_items_route_check 제약을 함께 갱신해야 한다
+// (2026-07-15 사용자 확인: 기존 5개 화면만 재배치/제목·순서 변경 → 2026-07-16 "/work-orders" 추가로 6개).
+export const SIDEBAR_MENU_ROUTES = ["/standards", "/sites", "/documents", "/members", "/settings", "/work-orders"] as const
 export type SidebarMenuRoute = (typeof SIDEBAR_MENU_ROUTES)[number]
 
 export const SIDEBAR_MENU_ROUTE_ICON: Record<SidebarMenuRoute, LucideIcon> = {
@@ -14,6 +15,7 @@ export const SIDEBAR_MENU_ROUTE_ICON: Record<SidebarMenuRoute, LucideIcon> = {
   "/documents": FileText,
   "/members": Users,
   "/settings": Settings,
+  "/work-orders": ClipboardEdit,
 }
 
 // 그룹(상위 메뉴, route가 null인 항목)에 쓰는 기본 아이콘.

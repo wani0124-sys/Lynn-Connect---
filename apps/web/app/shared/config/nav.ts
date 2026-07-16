@@ -1,4 +1,4 @@
-import { ClipboardCheck, ClipboardList, FileText, Settings, Users } from "lucide-react"
+import { ClipboardCheck, ClipboardEdit, ClipboardList, FileText, Settings, Users } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 export interface NavItem {
@@ -12,6 +12,7 @@ export interface NavItem {
 export const navItems: NavItem[] = [
   { to: "/standards", label: "부서별 업무기준 (메일공지)", icon: ClipboardList },
   { to: "/sites", label: "현장 점검", icon: ClipboardCheck },
+  { to: "/work-orders", label: "작업지시서", icon: ClipboardEdit },
   { to: "/documents", label: "문서 관리", icon: FileText },
 ]
 
