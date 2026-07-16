@@ -171,7 +171,7 @@ function NavList({
   return (
     <nav className={cn("flex flex-col gap-1 p-2", className)}>
       {items.map((node) =>
-        node.children.length > 0 ? (
+        node.route === null ? (
           <NavGroupRow
             key={node.key}
             node={node}
@@ -196,7 +196,7 @@ export default function AppLayout() {
   const setMobileNavOpen = useUiLayoutStore((state) => state.setMobileNavOpen)
   // 그룹(하위 메뉴가 있는 항목)은 기본적으로 펼친 상태로 시작하고, 필요하면 접을 수 있게 한다.
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    () => new Set([...primaryNav, ...secondaryNav].filter((node) => node.children.length > 0).map((node) => node.key)),
+    () => new Set([...primaryNav, ...secondaryNav].filter((node) => node.route === null).map((node) => node.key)),
   )
 
   function toggleGroup(key: string) {
