@@ -4,7 +4,7 @@ Woomi 표준 웹 서비스 프로젝트에서 모든 AI 에이전트가 먼저 �
 
 이 문서는 길게 구현 방법을 설명하지 않는다. 작업 유형을 분류하고, 필요한 `.agents/*` 문서로 라우팅하며, 보안/배포/데이터 손실 같은 절대 금지 규칙만 직접 가진다.
 
-- 표준 버전: `2.7-draft`
+- 표준 버전: `2.8-draft`
 - 최종 수정일: 2026-10-01
 - 기준 레퍼런스: CTPA Hono Worker layered architecture
 - 1차 원칙: 실제 코드와 가장 가까운 프로젝트 문서가 우선한다. 단, 보안/배포/데이터 손실 금지 규칙은 완화할 수 없다.
@@ -266,4 +266,4 @@ Risk:
 
 - **메일 처리**: Gemini API를 활용한 메일 요약/정제 (mail_bot.js 참고)
 - **데이터 저장**: Supabase RLS (Row Level Security)로 본사/현장 데이터 분리
-- **지속성**: 회사 내부 운영이므로 배포는 Cloudflare 클래식 모드 또는 회사 서버 선택 가능
+- **배포**: Render(Node web service, 루트 `render.yaml`)로 결정(2026-10-01). main merge 시 자동 배포. 상세는 `.agents/DEPLOYMENT.md` 0장

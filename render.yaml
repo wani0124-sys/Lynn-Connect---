@@ -1,0 +1,31 @@
+# Render Blueprint — Lynn-Connect 웹 앱(apps/web) 배포 설정.
+# Render 대시보드 > New > Blueprint에서 이 저장소를 선택하면 아래 서비스가 생성되고,
+# 이후 main 브랜치에 push(PR merge)될 때마다 자동으로 다시 빌드·배포된다.
+# 배포 기준과 환경변수 설명은 .agents/DEPLOYMENT.md "0. Project Override: Render"를 따른다.
+services:
+  - type: web
+    name: lynn-connect
+    runtime: node
+    # 무료 플랜은 15분 동안 접속이 없으면 잠들어 첫 접속이 30초~1분 느리다.
+    # 상시 운영이 필요하면 대시보드에서 starter 이상으로 변경한다(비용 발생).
+    plan: free
+    region: singapore
+    branch: main
+    autoDeploy: true
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    # react-router-serve가 NODE_ENV=production을 기본값으로 쓰고 Render가 주는 PORT로 listen한다.
+    startCommand: pnpm start
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      # 아래 값들은 저장소에 절대 커밋하지 않는다. Blueprint 생성 시 대시보드에서 직접 입력한다(sync: false).
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # 세션 쿠키 서명용 무작위 값. Render가 자동 생성한다(미설정 시 서버가 기동을 거부한다).
+      - key: SESSION_SECRET
+        generateValue: true

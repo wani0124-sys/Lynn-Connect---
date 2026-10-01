@@ -4,11 +4,7 @@
       "Bash(pkill -f \"react-router dev\")",
       "Bash(supabase --version)",
       "Bash(node -e ' *)",
-      "Bash(pnpm add *)",
-      "Bash(rm -f /tmp/cookies3.txt)",
-      "Bash(curl -s -c /tmp/cookies3.txt -X POST http://localhost:5174/login -d 'email=admin@woomi.dev&password=admin1234&redirectTo=/standards' -o /dev/null -w 'login HTTP:%{http_code}\\\\n')",
-      "Bash(curl -s -b /tmp/cookies3.txt \"http://localhost:5174/standards\" -o /tmp/standards_final.html -w \"HTTP:%{http_code}\\\\n\")",
-      "Bash(taskkill //PID 61056 //F //T)"
+      "Bash(pnpm add *)"
     ]
   },
   "hooks": {

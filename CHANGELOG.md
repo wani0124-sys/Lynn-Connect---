@@ -8,6 +8,17 @@
 
 ---
 
+## [2.8-draft] - 2026-10-01
+
+### 추가
+- **Render 배포 설정** — 루트 `render.yaml`(Blueprint) 추가. Node web service `lynn-connect`(singapore, free 플랜), main merge 시 자동 배포, 비밀 환경변수는 대시보드 입력(`sync: false`)·`SESSION_SECRET`은 자동 생성. `.agents/DEPLOYMENT.md`에 "0. Project Override: Render" 장 추가(Cloudflare 기준보다 우선), `AGENTS.md` 기술 추가 사항의 배포 항목 갱신.
+
+### 보안
+- 운영 모드(`NODE_ENV=production`)에서 `SESSION_SECRET`이 없으면 서버 기동을 거부하도록 변경(누구나 아는 개발용 기본 시크릿으로 세션 쿠키가 서명되는 것 방지).
+- `.claude/settings.json` 권한 허용 목록에 남아 있던 일회성 테스트 명령(데모 계정 이메일/비밀번호 포함) 제거.
+
+---
+
 ## [2.7-draft] - 2026-10-01
 
 ### 추가
