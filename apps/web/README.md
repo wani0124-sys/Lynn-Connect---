@@ -1,6 +1,6 @@
 # Lynn-Connect web
 
-React Router v7 기반 Lynn-Connect(본사 ↔ 현장 정보 공유 플랫폼) 앱이다. `/standards`(부서별 업무기준)·`/sites`(대외기관 점검)·`/documents`(문서 리비전 관리)·`/members`(멤버 관리)는 실제 구현된 기능이고, `/settings`는 "메뉴 관리" 탭만 실제 기능이며 나머지 탭은 템플릿이 제공하는 placeholder다. `/work-orders`는 사이드바 메뉴/라우트만 있는 스캐폴드로, 실제 기능은 추후 구현 예정이다.
+React Router v7 기반 Lynn-Connect(본사 ↔ 현장 정보 공유 플랫폼) 앱이다. `/standards`(부서별 업무기준)·`/sites`(대외기관 점검)·`/documents`(문서 리비전 관리)·`/members`(멤버 관리)는 실제 구현된 기능이고, `/settings`는 "메뉴 관리" 탭만 실제 기능이며 나머지 탭은 템플릿이 제공하는 placeholder다.
 
 ---
 
@@ -50,7 +50,6 @@ pnpm typecheck   # 타입 검사
 | `/standards/new` | `app/routes/standards-new.tsx` | EML 업로드 | 실제 |
 | `/standards/:postId` | `app/routes/standards-detail.tsx` | 업무기준 상세 — 본문, 첨부파일, 제목/부서/구분자 수정 | 실제 |
 | `/sites` | `app/routes/sites.tsx` | 대외기관 점검 — "점검 프로세스"(고정 안내)/"현장 점검결과"(현장별 이력·인쇄)/"AI 분석"(Claude 문답) 상위 탭 | 실제 |
-| `/work-orders` | `app/routes/work-orders.tsx` | 작업지시서 — 메뉴/라우트만 있는 스캐폴드 | 스캐폴드 |
 | `/documents` | `app/routes/documents.tsx` | 문서 관리 — 시리즈 탭 전환, 리비전 이력·diff·첨부파일(메인+서브) | 실제 |
 | `/members` | `app/routes/members.tsx` | 멤버 관리 — 계정 생성·수정·삭제, 현장별 관리 권한 | 실제 |
 | `/settings` | `app/routes/settings.tsx` | 설정 — "메뉴 관리" 탭(실제), 프로필/알림/계정 탭(placeholder) | 부분 실제 |
