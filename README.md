@@ -6,8 +6,8 @@
 
 적용 중인 템플릿 기준:
 
-- 표준 버전: `2.6-draft`
-- 최종 수정일: 2026-07-16
+- 표준 버전: `2.7-draft`
+- 최종 수정일: 2026-09-30
 - 기준 레퍼런스: CTPA Hono Worker layered architecture
 - 기본 대상: React Router v7 + Hono/Cloudflare Worker + Supabase PostgreSQL 프로젝트
 

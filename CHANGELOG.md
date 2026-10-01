@@ -8,6 +8,13 @@
 
 ---
 
+## [2.7-draft] - 2026-09-30
+
+### 추가
+- **현장별 중요메일** (`/site-mails`) — "부서별 업무기준"과 동일한 EML 업로드·정리 기능을 현장 단위로 제공. 분류 축이 부서 대신 현장(sites)이며, 구분자(카테고리)는 `standard_categories`를 그대로 재사용해 부서 화면과 taxonomy를 공유한다. `site_inspections`와 동일하게 본사(admin/manager)는 모든 현장에, 현장(member) 계정은 자신이 소속된 현장의 메일만 업로드·수정·삭제할 수 있다(구분자 자체의 생성/수정/삭제는 부서 화면과 동일하게 본사 전용). 사이드바 메뉴가 가리킬 수 있는 고정 화면을 5개 → 6개로 확장. DB: `supabase/migrations/20260930090000_site_mails.sql`(`site_mail_posts`/`site_mail_attachments` 테이블, `site-mails` storage 버킷, `sidebar_menu_items_route_check` 확장 + "현장" 그룹 하위 "현장 메일함" 리프 시드).
+
+---
+
 ## [2.6-draft] - 2026-07-16
 
 ### 추가

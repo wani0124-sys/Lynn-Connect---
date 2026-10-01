@@ -1,4 +1,4 @@
-import { ClipboardCheck, ClipboardList, FileQuestion, FileText, Settings, Users } from "lucide-react"
+import { ClipboardCheck, ClipboardList, FileQuestion, FileText, Mail, Settings, Users } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 export type SidebarMenuPlacement = "primary" | "secondary"
@@ -6,15 +6,17 @@ export type SidebarMenuPlacement = "primary" | "secondary"
 // 실제 화면이 있는 고정 라우트 목록(아이콘 매핑 용도). 새 화면을 만들 때 이 배열과 DB의
 // sidebar_menu_items_route_check 제약을 함께 갱신한다
 // (2026-07-15 사용자 확인: 기존 5개 화면만 재배치/제목·순서 변경 → 2026-07-16 "/work-orders" 추가로 6개
-// → 2026-09-10 사용자 요청으로 "/work-orders"(작업지시서) 스캐폴드 제거, 다시 5개).
+// → 2026-09-10 사용자 요청으로 "/work-orders"(작업지시서) 스캐폴드 제거, 다시 5개
+// → 2026-09-30 사용자 요청으로 "/site-mails"(현장 메일함) 추가, 다시 6개).
 // 이와 별개로 관리자는 메뉴 관리 화면에서 아직 실제 화면이 없는 "/menu/:slug" 커스텀 하위 메뉴도 만들 수 있다
 // (`sidebarMenuRouteIcon`가 고정 목록에 없는 route는 기본 아이콘으로 대체한다).
-export const SIDEBAR_MENU_ROUTES = ["/standards", "/sites", "/documents", "/members", "/settings"] as const
+export const SIDEBAR_MENU_ROUTES = ["/standards", "/sites", "/site-mails", "/documents", "/members", "/settings"] as const
 export type SidebarMenuRoute = (typeof SIDEBAR_MENU_ROUTES)[number]
 
 export const SIDEBAR_MENU_ROUTE_ICON: Record<SidebarMenuRoute, LucideIcon> = {
   "/standards": ClipboardList,
   "/sites": ClipboardCheck,
+  "/site-mails": Mail,
   "/documents": FileText,
   "/members": Users,
   "/settings": Settings,

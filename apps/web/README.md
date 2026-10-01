@@ -1,6 +1,6 @@
 # Lynn-Connect web
 
-React Router v7 기반 Lynn-Connect(본사 ↔ 현장 정보 공유 플랫폼) 앱이다. `/standards`(부서별 업무기준)·`/sites`(대외기관 점검)·`/documents`(문서 리비전 관리)·`/members`(멤버 관리)는 실제 구현된 기능이고, `/settings`는 "메뉴 관리" 탭만 실제 기능이며 나머지 탭은 템플릿이 제공하는 placeholder다.
+React Router v7 기반 Lynn-Connect(본사 ↔ 현장 정보 공유 플랫폼) 앱이다. `/standards`(부서별 업무기준)·`/sites`(대외기관 점검)·`/site-mails`(현장별 중요메일)·`/documents`(문서 리비전 관리)·`/members`(멤버 관리)는 실제 구현된 기능이고, `/settings`는 "메뉴 관리" 탭만 실제 기능이며 나머지 탭은 템플릿이 제공하는 placeholder다.
 
 ---
 
@@ -50,6 +50,9 @@ pnpm typecheck   # 타입 검사
 | `/standards/new` | `app/routes/standards-new.tsx` | EML 업로드 | 실제 |
 | `/standards/:postId` | `app/routes/standards-detail.tsx` | 업무기준 상세 — 본문, 첨부파일, 제목/부서/구분자 수정 | 실제 |
 | `/sites` | `app/routes/sites.tsx` | 대외기관 점검 — "점검 프로세스"(고정 안내)/"현장 점검결과"(현장별 이력·인쇄)/"AI 분석"(Claude 문답) 상위 탭 | 실제 |
+| `/site-mails` | `app/routes/site-mails.tsx` | 현장별 중요메일 — 현장 탭 + 구분자 탭, 검색, 일괄 구분자 적용·삭제(현장 계정은 자기 현장만 쓰기) | 실제 |
+| `/site-mails/new` | `app/routes/site-mails-new.tsx` | EML 업로드(현장 선택 포함) | 실제 |
+| `/site-mails/:postId` | `app/routes/site-mails-detail.tsx` | 현장 메일 상세 — 본문, 첨부파일, 제목/구분자 수정 | 실제 |
 | `/documents` | `app/routes/documents.tsx` | 문서 관리 — 시리즈 탭 전환, 리비전 이력·diff·첨부파일(메인+서브) | 실제 |
 | `/members` | `app/routes/members.tsx` | 멤버 관리 — 계정 생성·수정·삭제, 현장별 관리 권한 | 실제 |
 | `/settings` | `app/routes/settings.tsx` | 설정 — "메뉴 관리" 탭(실제), 프로필/알림/계정 탭(placeholder) | 부분 실제 |
@@ -85,8 +88,8 @@ pnpm typecheck   # 타입 검사
 ```
 app/
   routes/     # 라우트(화면). react-router의 loader/컴포넌트
-  features/   # 화면 단위 기능. auth(로그인), task-standards(업무기준), sites(현장/점검/AI 문답), documents(문서 리비전), members(멤버 관리), sidebar-menu(메뉴 관리) 등
-  entities/   # 도메인 모델·도메인 UI. task-standard, site, document, member, sidebar-menu
+  features/   # 화면 단위 기능. auth(로그인), task-standards(업무기준), sites(현장/점검/AI 문답), site-mails(현장별 중요메일), documents(문서 리비전), members(멤버 관리), sidebar-menu(메뉴 관리) 등
+  entities/   # 도메인 모델·도메인 UI. task-standard, site, site-mail, document, member, sidebar-menu
   shared/     # 공통 UI·유틸·설정·스토어
     ui/       # 재사용 컴포넌트 (Button, Card, Table ...)
     lib/      # cn, format, supabase/anthropic 클라이언트 등 유틸
