@@ -92,10 +92,10 @@ export async function createMenuLeaf(label: string, parentId: number, placement:
   return toMenuItem(data as MenuItemRow)
 }
 
-// 관리자가 만든 커스텀 하위 메뉴만 삭제할 수 있다(route가 "/menu/"로 시작하는 항목).
-// 고정 6개 화면 리프는 이 조건에 걸리지 않아 실수로 지워지지 않는다.
-export async function deleteCustomMenuLeaf(id: number): Promise<void> {
-  const { error } = await getSupabaseServerClient().from(TABLE).delete().eq("id", id).like("route", "/menu/%")
+// 하위 메뉴(리프)를 사이드바에서 제거한다. 고정 화면 리프를 지워도 실제 라우트/페이지 코드는
+// 그대로 남아있고 사이드바 메뉴 노출만 사라진다(route is null인 그룹은 deleteMenuGroup으로만 삭제).
+export async function deleteMenuLeaf(id: number): Promise<void> {
+  const { error } = await getSupabaseServerClient().from(TABLE).delete().eq("id", id).not("route", "is", null)
   if (error) throw new Error(`하위 메뉴를 삭제하지 못했습니다: ${error.message}`)
 }
 

@@ -10,8 +10,8 @@ import { requireHeadquarters, requireUser } from "~/features/auth/model/session.
 import {
   createMenuGroup,
   createMenuLeaf,
-  deleteCustomMenuLeaf,
   deleteMenuGroup,
+  deleteMenuLeaf,
   listMenuItems,
   renameMenuItem,
   reorderMenuItems,
@@ -92,7 +92,7 @@ export async function action({ request }: ActionFunctionArgs) {
         return { ok: true as const }
       }
       case "menu.deleteLeaf": {
-        await deleteCustomMenuLeaf(Number(form.get("id")))
+        await deleteMenuLeaf(Number(form.get("id")))
         return { ok: true as const }
       }
       case "menu.setParent": {
