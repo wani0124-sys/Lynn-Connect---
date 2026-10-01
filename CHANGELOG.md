@@ -8,10 +8,16 @@
 
 ---
 
-## [2.7-draft] - 2026-09-30
+## [2.7-draft] - 2026-10-01
 
 ### 추가
 - **현장별 중요메일** (`/site-mails`) — "부서별 업무기준"과 동일한 EML 업로드·정리 기능을 현장 단위로 제공. 분류 축이 부서 대신 현장(sites)이며, 구분자(카테고리)는 `standard_categories`를 그대로 재사용해 부서 화면과 taxonomy를 공유한다. `site_inspections`와 동일하게 본사(admin/manager)는 모든 현장에, 현장(member) 계정은 자신이 소속된 현장의 메일만 업로드·수정·삭제할 수 있다(구분자 자체의 생성/수정/삭제는 부서 화면과 동일하게 본사 전용). 사이드바 메뉴가 가리킬 수 있는 고정 화면을 5개 → 6개로 확장. DB: `supabase/migrations/20260930090000_site_mails.sql`(`site_mail_posts`/`site_mail_attachments` 테이블, `site-mails` storage 버킷, `sidebar_menu_items_route_check` 확장 + "현장" 그룹 하위 "현장 메일함" 리프 시드).
+- **업무기준 본문 수정·첨부 직접 다운로드** (`/standards/:postId`) — 상세 화면에서 본문(텍스트/HTML)을 직접 편집할 수 있게 하고 길이 검증(`validateBodyText`/`validateBodyHtml`) 추가. 첨부파일을 서버 경유로 내려받는 `/standards/attachments/:attachmentId/download` 라우트 추가. EML 파싱 시 `Content-Disposition: inline` 이미지가 첨부파일로 잡히지 않도록 필터 보강.
+
+### 변경
+- 메뉴 관리(`/settings`)에서 커스텀(`/menu/*`) 리프뿐 아니라 고정 화면 리프도 사이드바에서 삭제할 수 있게 변경(라우트/페이지 코드는 유지되고 사이드바 노출만 사라짐).
+- `/sites` 상위 탭 "점검 프로세스" → "점검 대응 프로세스"로 이름 변경, 대시보드 배너 시계에 `tabular-nums` 적용.
+- `.agents/data/MIGRATION.md` Migration Log에 누락돼 있던 `20260930090000_site_mails.sql` 항목 추가(2026-10-01). `20260910003931` 적용 후에 적용해야 한다는 순서 제약 명시.
 
 ---
 
