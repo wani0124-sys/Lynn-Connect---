@@ -21,7 +21,9 @@ import {
   reorderCategories,
 } from "~/features/task-standards/model/task-standards.repository.server"
 import { CategoryManageModal } from "~/features/task-standards/ui/category-manage-modal"
-import { listSites } from "~/features/sites/model/sites.repository.server"
+import { createSite, deleteSite, listSites, renameSite, reorderSites } from "~/features/sites/model/sites.repository.server"
+import { validateSiteName } from "~/features/sites/model/sites.schema"
+import { SiteManageModal } from "~/features/sites/ui/site-manage-modal"
 import { formatDate } from "~/shared/lib/format"
 import { Button } from "~/shared/ui/button"
 import { Card } from "~/shared/ui/card"
@@ -55,7 +57,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const siteIdParam = url.searchParams.get("site")
   const parsedSiteId = siteIdParam ? Number(siteIdParam) : sorted[0]?.id
   const selectedSiteId = Number.isFinite(parsedSiteId) ? (parsedSiteId as number) : null
-  const selectedSite = selectedSiteId !== null ? (sorted.find((site) => site.id === selectedSiteId) ?? null) : null
+  // 선택한 현장이 방금 삭제됐거나 잘못된 값이면 첫 번째 현장으로 대체한다.
+  const selectedSite =
+    (selectedSiteId !== null ? sorted.find((site) => site.id === selectedSiteId) : undefined) ?? sorted[0] ?? null
 
   const [categories, postList] = await Promise.all([
     listCategories(),
@@ -70,6 +74,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     categories,
     postList,
     canManageCategories: isHeadquarters(user.role),
+    canManageSites: isHeadquarters(user.role),
     canWrite: selectedSite ? canWriteSite(user, selectedSite.id) : false,
   }
 }
@@ -80,6 +85,33 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     switch (intent) {
+      // 현장 카탈로그는 /sites(대외기관 점검)와 공유한다 — 여기서 추가·수정·삭제해도 양쪽 화면에 똑같이 반영된다.
+      case "site.create": {
+        await requireHeadquarters(request)
+        const name = String(form.get("name") ?? "").trim()
+        const validationError = validateSiteName(name)
+        if (validationError) return data({ error: validationError }, { status: 400 })
+        await createSite(name, String(form.get("address") ?? "").trim() || null)
+        return { ok: true }
+      }
+      case "site.rename": {
+        await requireHeadquarters(request)
+        const name = String(form.get("name") ?? "").trim()
+        const validationError = validateSiteName(name)
+        if (validationError) return data({ error: validationError }, { status: 400 })
+        await renameSite(Number(form.get("id")), name, String(form.get("address") ?? "").trim() || null)
+        return { ok: true }
+      }
+      case "site.delete": {
+        await requireHeadquarters(request)
+        await deleteSite(Number(form.get("id")))
+        return { ok: true }
+      }
+      case "site.reorder": {
+        await requireHeadquarters(request)
+        await reorderSites(JSON.parse(String(form.get("items") ?? "[]")))
+        return { ok: true }
+      }
       case "category.create": {
         await requireHeadquarters(request)
         await createCategory(String(form.get("name") ?? ""), String(form.get("color") ?? "#6b7280"))
@@ -127,12 +159,15 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function SiteMailsRoute() {
-  const { sites, selectedSite, categories, postList, canManageCategories, canWrite } = useLoaderData<typeof loader>()
+  const { sites, selectedSite, categories, postList, canManageCategories, canManageSites, canWrite } =
+    useLoaderData<typeof loader>()
   const [searchParams, setSearchParams] = useSearchParams()
   const catFetcher = useFetcher<typeof action>()
   const bulkFetcher = useFetcher<typeof action>()
+  const siteFetcher = useFetcher<typeof action>()
 
   const [catModalOpen, setCatModalOpen] = useState(false)
+  const [siteModalOpen, setSiteModalOpen] = useState(false)
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [qInput, setQInput] = useState(searchParams.get("q") ?? "")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -180,11 +215,9 @@ export default function SiteMailsRoute() {
   ]
 
   const actionError =
-    catFetcher.data && "error" in catFetcher.data
-      ? catFetcher.data.error
-      : bulkFetcher.data && "error" in bulkFetcher.data
-        ? bulkFetcher.data.error
-        : null
+    [catFetcher.data, bulkFetcher.data, siteFetcher.data].find(
+      (result): result is { error: string } => !!result && "error" in result,
+    )?.error ?? null
 
   function toggleOne(id: string) {
     setSelectedIds((prev) => {
@@ -207,10 +240,10 @@ export default function SiteMailsRoute() {
         title={pageTitle}
         description="현장에서 발생하는 중요 메일을 현장별로 정리해 관리합니다"
         actions={
-          canManageCategories ? (
-            <Button variant="outline" onClick={() => setCatModalOpen(true)}>
+          canManageSites ? (
+            <Button variant="outline" onClick={() => setSiteModalOpen(true)}>
               <Settings2 className="size-4" aria-hidden />
-              구분자 관리
+              현장 관리
             </Button>
           ) : null
         }
@@ -220,7 +253,10 @@ export default function SiteMailsRoute() {
 
       {sites.length === 0 ? (
         <Card className="p-5">
-          <EmptyState title="등록된 현장이 없습니다" description="현장 점검(/sites) 화면의 현장 관리에서 현장을 먼저 추가하세요." />
+          <EmptyState
+            title="등록된 현장이 없습니다"
+            description={canManageSites ? "우측 상단의 현장 관리에서 현장을 먼저 추가하세요." : "본사 관리자에게 현장 추가를 요청하세요."}
+          />
         </Card>
       ) : (
         <>
@@ -238,16 +274,14 @@ export default function SiteMailsRoute() {
           ) : (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm text-muted-foreground">{selectedSite.address ?? "주소 미등록"}</p>
-                {canWrite ? (
-                  <Button onClick={() => setUploadModalOpen(true)}>
-                    <Plus className="size-4" aria-hidden />
-                    EML 업로드
+                <Tabs items={catTabs} value={selectedCatParam} onChange={(value) => updateParams({ cat: value || null })} />
+                {canManageCategories ? (
+                  <Button variant="outline" onClick={() => setCatModalOpen(true)}>
+                    <Settings2 className="size-4" aria-hidden />
+                    구분자 관리
                   </Button>
                 ) : null}
               </div>
-
-              <Tabs items={catTabs} value={selectedCatParam} onChange={(value) => updateParams({ cat: value || null })} />
 
               <Card className="p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -268,13 +302,21 @@ export default function SiteMailsRoute() {
                       aria-label="검색"
                     />
                   </form>
-                  <Select value={sort} onChange={(e) => updateParams({ sort: e.target.value })} aria-label="정렬">
-                    {SORT_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <Select value={sort} onChange={(e) => updateParams({ sort: e.target.value })} aria-label="정렬">
+                      {SORT_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </Select>
+                    {canWrite ? (
+                      <Button className="shrink-0" onClick={() => setUploadModalOpen(true)}>
+                        <Plus className="size-4" aria-hidden />
+                        EML 업로드
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="mt-4">
@@ -411,6 +453,23 @@ export default function SiteMailsRoute() {
           )}
         </>
       )}
+
+      {canManageSites ? (
+        <SiteManageModal
+          open={siteModalOpen}
+          onClose={() => setSiteModalOpen(false)}
+          sites={sites}
+          pending={siteFetcher.state !== "idle"}
+          onCreate={(name, address) => siteFetcher.submit({ intent: "site.create", name, address }, { method: "post" })}
+          onRename={(id, name, address) =>
+            siteFetcher.submit({ intent: "site.rename", id: String(id), name, address }, { method: "post" })
+          }
+          onDelete={(id) => siteFetcher.submit({ intent: "site.delete", id: String(id) }, { method: "post" })}
+          onReorder={(items) => {
+            if (items.length) siteFetcher.submit({ intent: "site.reorder", items: JSON.stringify(items) }, { method: "post" })
+          }}
+        />
+      ) : null}
 
       {canManageCategories ? (
         <CategoryManageModal

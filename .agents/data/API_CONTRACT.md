@@ -136,12 +136,12 @@ Request params: ?site=<id>&cat=<id|null>&q=&sort=sent_desc|sent_asc|created_desc
 Response: { sites: Site[], selectedSite: Site | null, categories: StandardCategory[], postList: SiteMailPostListResult, canManageCategories: boolean, canWrite: boolean }
 Related repository: site-mails.repository.server.ts#listSiteMailPosts, sites.repository.server.ts#listSites, task-standards.repository.server.ts#listCategories
 
-Route: POST /site-mails (routes/site-mails.tsx action, intent=category.*|post.bulkUpdate|post.bulkDelete)
-Purpose: 구분자 관리(부서 화면과 공유하는 standard_categories에 그대로 반영), 선택한 메일 일괄 구분자 적용/삭제
-Auth required: category.*는 로그인 + 본사 권한(requireHeadquarters). post.bulkUpdate/post.bulkDelete는 requireSiteWriteAccess(request, siteId)
-Request body: category.*는 task-standards의 동일 intent와 같음. post.bulkUpdate/bulkDelete는 { siteId, ids: JSON, categoryId? }
+Route: POST /site-mails (routes/site-mails.tsx action, intent=site.*|category.*|post.bulkUpdate|post.bulkDelete)
+Purpose: 현장 관리(/sites와 공유하는 sites 카탈로그 추가·수정·삭제·순서 변경), 구분자 관리(부서 화면과 공유하는 standard_categories에 그대로 반영), 선택한 메일 일괄 구분자 적용/삭제
+Auth required: site.*/category.*는 로그인 + 본사 권한(requireHeadquarters). post.bulkUpdate/post.bulkDelete는 requireSiteWriteAccess(request, siteId)
+Request body: site.*는 /sites의 동일 intent(site.create|site.rename|site.delete|site.reorder)와 같음. category.*는 task-standards의 동일 intent와 같음. post.bulkUpdate/bulkDelete는 { siteId, ids: JSON, categoryId? }
 Response: 성공 시 { ok: true }. 실패 시 { error: string }(400)
-Related repository: task-standards.repository.server.ts#createCategory/renameCategory/deleteCategory/reorderCategories, site-mails.repository.server.ts#bulkUpdateSiteMailPostMeta/bulkDeleteSiteMailPosts
+Related repository: sites.repository.server.ts#createSite/renameSite/deleteSite/reorderSites, task-standards.repository.server.ts#createCategory/renameCategory/deleteCategory/reorderCategories, site-mails.repository.server.ts#bulkUpdateSiteMailPostMeta/bulkDeleteSiteMailPosts
 Notes: bulk 함수는 update/delete 쿼리 자체를 site_id로도 좁혀서, 요청의 siteId를 통과했더라도 실제로는 다른 현장 소속인 id는 조용히 무시된다.
 
 Route: GET/POST /site-mails/new (routes/site-mails-new.tsx loader/action)
