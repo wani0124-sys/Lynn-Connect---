@@ -27,6 +27,8 @@ import {
 import {
   validateAttachmentFile,
   validateAttachmentFilename,
+  validateBodyHtml,
+  validateBodyText,
   validateTitle,
 } from "~/features/task-standards/model/task-standards.schema"
 import { formatDateTime } from "~/shared/lib/format"
@@ -65,7 +67,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
         const departmentIdRaw = form.get("departmentId")
         const categoryIdRaw = form.get("categoryId")
         const titleRaw = form.get("title")
-        const fields: { departmentId?: number | null; categoryId?: number | null; title?: string } = {}
+        const bodyTextRaw = form.get("bodyText")
+        const bodyHtmlRaw = form.get("bodyHtml")
+        const fields: {
+          departmentId?: number | null
+          categoryId?: number | null
+          title?: string
+          bodyText?: string
+          bodyHtml?: string | null
+        } = {}
         if (departmentIdRaw !== null) fields.departmentId = departmentIdRaw ? Number(departmentIdRaw) : null
         if (categoryIdRaw !== null) fields.categoryId = categoryIdRaw ? Number(categoryIdRaw) : null
         if (titleRaw !== null) {
@@ -73,6 +83,20 @@ export async function action({ request, params }: ActionFunctionArgs) {
           const validationError = validateTitle(title)
           if (validationError) return data({ error: validationError }, { status: 400 })
           fields.title = title
+        }
+        // bodyText/bodyHtml은 실제로 화면에 표시되던(=수정 대상이던) 쪽만 전달되며, 반대쪽 필드는 건드리지 않는다.
+        // 인라인 이미지 등은 bodyHtml 안에 포함되므로, 여기서 상대 필드를 null로 지우면 이미지가 함께 삭제된다.
+        if (bodyTextRaw !== null) {
+          const bodyText = String(bodyTextRaw)
+          const validationError = validateBodyText(bodyText)
+          if (validationError) return data({ error: validationError }, { status: 400 })
+          fields.bodyText = bodyText
+        }
+        if (bodyHtmlRaw !== null) {
+          const bodyHtml = String(bodyHtmlRaw)
+          const validationError = validateBodyHtml(bodyHtml)
+          if (validationError) return data({ error: validationError }, { status: 400 })
+          fields.bodyHtml = bodyHtml
         }
         await updatePostMeta(postId, fields, user.id)
         return { ok: true }
@@ -123,11 +147,18 @@ export default function StandardsDetailRoute() {
   const [isEditingClassification, setIsEditingClassification] = useState(false)
   const [departmentDraft, setDepartmentDraft] = useState(String(post?.departmentId ?? ""))
   const [categoryDraft, setCategoryDraft] = useState(String(post?.categoryId ?? ""))
+  const [isEditingBody, setIsEditingBody] = useState(false)
+  const [bodyDraft, setBodyDraft] = useState(post?.bodyHtml ?? post?.bodyText ?? "")
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const editableBodyRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     setTitleDraft(post?.title ?? "")
   }, [post?.title])
+
+  useEffect(() => {
+    setBodyDraft(post?.bodyHtml ?? post?.bodyText ?? "")
+  }, [post?.bodyHtml, post?.bodyText])
 
   useEffect(() => {
     setDepartmentDraft(String(post?.departmentId ?? ""))
@@ -220,6 +251,47 @@ export default function StandardsDetailRoute() {
     setIsEditingClassification(false)
   }
 
+  // bodyHtml이 있으면 화면에는 항상 HTML이 렌더링되므로, 수정도 렌더링된 화면(iframe designMode)에서 직접 한다.
+  // (인라인 이미지 등이 bodyHtml 안에 base64로 포함되어 있어 bodyText로 대체 저장하면 사라진다.)
+  const bodyIsHtml = Boolean(post.bodyHtml)
+
+  const startBodyEdit = () => {
+    setBodyDraft(post.bodyHtml ?? post.bodyText ?? "")
+    setIsEditingBody(true)
+  }
+
+  const cancelBodyEdit = () => {
+    setBodyDraft(post.bodyHtml ?? post.bodyText ?? "")
+    setIsEditingBody(false)
+  }
+
+  const saveBodyEdit = () => {
+    if (bodyIsHtml) {
+      // designMode로 편집된 iframe 문서의 현재 DOM 상태를 그대로 읽어 저장한다.
+      // (원본 문자열과 브라우저가 재직렬화한 HTML은 속성 순서 등이 달라질 수 있어 단순 문자열 비교로
+      // 변경 여부를 판단하지 않는다.)
+      const editedHtml = editableBodyRef.current?.contentDocument?.documentElement.outerHTML
+      if (editedHtml === undefined) {
+        cancelBodyEdit()
+        return
+      }
+      metaFetcher.submit({ intent: "meta.update", bodyHtml: editedHtml }, { method: "post" })
+    } else {
+      const current = post.bodyText ?? ""
+      if (bodyDraft === current) {
+        cancelBodyEdit()
+        return
+      }
+      metaFetcher.submit({ intent: "meta.update", bodyText: bodyDraft }, { method: "post" })
+    }
+    setIsEditingBody(false)
+  }
+
+  const enableBodyDesignMode = () => {
+    const doc = editableBodyRef.current?.contentDocument
+    if (doc) doc.designMode = "on"
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -290,7 +362,14 @@ export default function StandardsDetailRoute() {
 
       <Card>
         <CardHeader className="flex-row items-center justify-between gap-4">
-          <CardTitle>본문</CardTitle>
+          <div className="flex items-center gap-1">
+            <CardTitle>본문</CardTitle>
+            {canManage && !isEditingBody ? (
+              <Button type="button" variant="ghost" size="icon" aria-label="본문 수정" onClick={startBodyEdit}>
+                <Pencil className="size-4" aria-hidden />
+              </Button>
+            ) : null}
+          </div>
           {canManage ? (
             isEditingClassification ? (
               <div className="flex flex-wrap items-center gap-2">
@@ -358,7 +437,54 @@ export default function StandardsDetailRoute() {
           ) : null}
         </CardHeader>
         <CardContent>
-          {post.bodyHtml ? (
+          {isEditingBody ? (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                {bodyIsHtml
+                  ? "아래 화면에서 보이는 내용을 직접 클릭해 수정하세요. 이미지는 그대로 유지됩니다."
+                  : "아래 내용을 직접 수정하세요."}
+              </p>
+              {bodyIsHtml ? (
+                <iframe
+                  ref={editableBodyRef}
+                  title="본문 수정"
+                  srcDoc={bodyDraft}
+                  sandbox="allow-same-origin"
+                  referrerPolicy="no-referrer"
+                  onLoad={enableBodyDesignMode}
+                  className="h-[480px] w-full rounded-md border border-border bg-white"
+                />
+              ) : (
+                <textarea
+                  autoFocus
+                  value={bodyDraft}
+                  onChange={(e) => setBodyDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") cancelBodyEdit()
+                  }}
+                  disabled={metaFetcher.state !== "idle"}
+                  rows={16}
+                  className="h-[480px] w-full resize-y rounded-md border border-border bg-background p-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-label="본문 내용"
+                />
+              )}
+              <div className="flex justify-end gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="저장"
+                  disabled={metaFetcher.state !== "idle"}
+                  onClick={saveBodyEdit}
+                >
+                  <Check className="size-4" aria-hidden />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" aria-label="취소" onClick={cancelBodyEdit}>
+                  <X className="size-4" aria-hidden />
+                </Button>
+              </div>
+            </div>
+          ) : post.bodyHtml ? (
             <iframe
               title="메일 본문"
               srcDoc={post.bodyHtml}
@@ -437,13 +563,11 @@ export default function StandardsDetailRoute() {
                             </Button>
                           </a>
                         ) : null}
-                        {attachmentUrls[att.id] ? (
-                          <a href={attachmentUrls[att.id]} download={att.filename}>
-                            <Button type="button" variant="ghost" size="icon" aria-label="다운로드">
-                              <Download className="size-4" aria-hidden />
-                            </Button>
-                          </a>
-                        ) : null}
+                        <a href={`/standards/attachments/${att.id}/download`} download={att.filename}>
+                          <Button type="button" variant="ghost" size="icon" aria-label="다운로드">
+                            <Download className="size-4" aria-hidden />
+                          </Button>
+                        </a>
                         {canManage ? (
                           <Button
                             type="button"

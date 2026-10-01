@@ -474,13 +474,21 @@ export async function insertPost(input: InsertPostInput): Promise<StandardPost> 
 
 export async function updatePostMeta(
   id: string,
-  fields: { departmentId?: number | null; categoryId?: number | null; title?: string },
+  fields: {
+    departmentId?: number | null
+    categoryId?: number | null
+    title?: string
+    bodyText?: string
+    bodyHtml?: string | null
+  },
   updatedBy: string,
 ): Promise<void> {
   const updates: Record<string, unknown> = { updated_by: updatedBy, updated_at: new Date().toISOString() }
   if ("departmentId" in fields) updates.department_id = fields.departmentId
   if ("categoryId" in fields) updates.category_id = fields.categoryId
   if ("title" in fields) updates.title = fields.title
+  if ("bodyText" in fields) updates.body_text = fields.bodyText
+  if ("bodyHtml" in fields) updates.body_html = fields.bodyHtml
 
   const { error } = await getSupabaseServerClient().from(TABLE_POSTS).update(updates).eq("id", id)
   if (error) throw new Error(`게시글 정보를 수정하지 못했습니다: ${error.message}`)
@@ -576,4 +584,22 @@ export async function getAttachmentDownloadUrl(id: string): Promise<{ url: strin
     .createSignedUrl(row.storage_path, SIGNED_URL_TTL_SECONDS)
   if (urlError || !data) throw new Error(`다운로드 링크 생성에 실패했습니다: ${urlError?.message ?? "unknown error"}`)
   return { url: data.signedUrl, filename: row.filename }
+}
+
+export async function getAttachmentFile(
+  id: string,
+): Promise<{ blob: Blob; mimeType: string | null; filename: string } | null> {
+  const supabase = getSupabaseServerClient()
+  const { data: row, error } = await supabase
+    .from(TABLE_ATTACHMENTS)
+    .select("storage_path, filename, mime_type")
+    .eq("id", id)
+    .maybeSingle()
+  if (error) throw new Error(`첨부파일 정보를 불러오지 못했습니다: ${error.message}`)
+  if (!row) return null
+
+  const { data, error: downloadError } = await supabase.storage.from(BUCKET).download(row.storage_path)
+  if (downloadError || !data)
+    throw new Error(`첨부파일을 불러오지 못했습니다: ${downloadError?.message ?? "unknown error"}`)
+  return { blob: data, mimeType: row.mime_type, filename: row.filename }
 }
