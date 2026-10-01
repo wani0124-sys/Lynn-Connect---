@@ -184,7 +184,7 @@ function DashboardBanner({ user }: { user: Member }) {
         </div>
       </div>
 
-      <div className="shrink-0 lg:text-right">
+      <div className="shrink-0 tabular-nums lg:text-right">
         <p className="text-sm font-semibold">{dateStr}</p>
         <p className="text-lg font-bold">{timeStr}</p>
       </div>

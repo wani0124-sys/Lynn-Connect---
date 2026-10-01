@@ -332,7 +332,7 @@ export default function SitesRoute() {
           <Tabs
             variant="folder"
             items={[
-              { value: STANDARD_TAB_VALUE, label: "점검 프로세스" },
+              { value: STANDARD_TAB_VALUE, label: "점검 대응 프로세스" },
               { value: RESULTS_TAB_VALUE, label: "현장 점검결과" },
               { value: AI_TAB_VALUE, label: "AI 분석" },
             ]}
