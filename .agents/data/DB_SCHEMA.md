@@ -440,11 +440,11 @@ Notes:
 
 Schema: public
 Table: sidebar_menu_items
-Purpose: 사이드바 메뉴의 제목/순서/상위-하위(2단계 고정) 구조를 관리자가 설정 화면(메뉴 관리 탭)에서 편집할 수 있게 한다. apps/web/app/shared/config/nav.ts의 하드코딩 배열(navItems/secondaryNavItems)을 대체한다. 2026-07-15 사용자 확인: 메뉴가 가리키는 화면은 기존 5개(부서별 업무기준/현장 점검/문서 관리/멤버 관리/설정)로 고정하고 새 라우트는 추가하지 않는다 → 2026-07-16 사용자 요청으로 "/work-orders"(작업지시서) 추가, 고정 화면 6개로 확장 → 2026-07-16(같은 날 추가 요청) "그룹을 만들면 그 아래 하위 메뉴도 새로 만들 수 있게 해달라"는 요청으로, 아직 실제 화면이 없는 커스텀 하위 메뉴("/menu/<8자리 hex>")를 관리자가 설정 화면에서 직접 만들 수 있게 확장. 코드로만 추가하는 고정 6개 화면 라우트를 또 추가할 때는 이 값과 apps/web/app/entities/sidebar-menu/model/sidebar-menu.types.ts#SIDEBAR_MENU_ROUTES, 아래 check constraint를 함께 갱신해야 한다.
+Purpose: 사이드바 메뉴의 제목/순서/상위-하위(2단계 고정) 구조를 관리자가 설정 화면(메뉴 관리 탭)에서 편집할 수 있게 한다. apps/web/app/shared/config/nav.ts의 하드코딩 배열(navItems/secondaryNavItems)을 대체한다. 2026-07-15 사용자 확인: 메뉴가 가리키는 화면은 기존 5개(부서별 업무기준/현장 점검/문서 관리/멤버 관리/설정)로 고정하고 새 라우트는 추가하지 않는다 → 2026-07-16 사용자 요청으로 "/work-orders"(작업지시서) 추가, 고정 화면 6개로 확장 → 2026-07-16(같은 날 추가 요청) "그룹을 만들면 그 아래 하위 메뉴도 새로 만들 수 있게 해달라"는 요청으로, 아직 실제 화면이 없는 커스텀 하위 메뉴("/menu/<8자리 hex>")를 관리자가 설정 화면에서 직접 만들 수 있게 확장 → 2026-09-10 사용자 요청으로 "/work-orders"(작업지시서) 스캐폴드 제거, 고정 화면 다시 5개로 축소. 코드로만 추가/제거하는 고정 화면 라우트를 바꿀 때는 이 값과 apps/web/app/entities/sidebar-menu/model/sidebar-menu.types.ts#SIDEBAR_MENU_ROUTES, 아래 check constraint를 함께 갱신해야 한다.
 Columns:
   id bigint (identity)
   label text
-  route text (nullable) -- null이면 하위 메뉴를 묶는 상위 그룹. 값이 있으면 고정 화면 중 하나('/standards' | '/sites' | '/documents' | '/members' | '/settings' | '/work-orders') 또는 관리자가 만든 커스텀 하위 메뉴('/menu/<8자리 hex>', 아직 실제 화면 없음 — menu-placeholder.tsx가 공통 스캐폴드를 보여줌)
+  route text (nullable) -- null이면 하위 메뉴를 묶는 상위 그룹. 값이 있으면 고정 화면 중 하나('/standards' | '/sites' | '/documents' | '/members' | '/settings') 또는 관리자가 만든 커스텀 하위 메뉴('/menu/<8자리 hex>', 아직 실제 화면 없음 — menu-placeholder.tsx가 공통 스캐폴드를 보여줌)
   parent_id bigint (self-FK, on delete set null) -- 그룹 삭제 시 하위 메뉴는 삭제되지 않고 최상위로 승격
   placement text ('primary' | 'secondary', 기본 'primary') -- 사이드바 상단(스크롤 영역) vs 하단(고정 관리 영역)
   sort_order int (기본 0)
@@ -454,19 +454,19 @@ Primary key: id
 Foreign keys: parent_id -> sidebar_menu_items(id) on delete set null
 Indexes: sidebar_menu_items_parent_id_idx, sidebar_menu_items_route_key(unique, route, route is not null인 행만)
 Unique constraints: sidebar_menu_items_route_key(route, partial unique) -- 화면 하나는 메뉴 트리에 한 번만 등장
-Check constraints: route는 고정값 6개 또는 '/menu/<8자리 hex>' 패턴만 허용(sidebar_menu_items_route_check), placement는 primary/secondary만 허용, parent_id가 있으면 route가 not null이어야 함(하위 메뉴는 항상 리프)
+Check constraints: route는 고정값 5개 또는 '/menu/<8자리 hex>' 패턴만 허용(sidebar_menu_items_route_check), placement는 primary/secondary만 허용, parent_id가 있으면 route가 not null이어야 함(하위 메뉴는 항상 리프)
 RLS policies: RLS enabled. sidebar_menu_items_no_direct_access(전체 거부, anon/authenticated) — service role로만 접근.
 RPC/functions: enforce_sidebar_menu_items_two_levels() + trigger sidebar_menu_items_two_levels(insert/update) — (1) parent_id가 가리키는 행이 실제 최상위(parent_id is null)인지, (2) 그 행의 route가 null(그룹)인지, (3) placement가 부모와 같은지 검증해 2단계 고정과 상위-하위 배치 일치를 강제한다.
 Related APIs: apps/web/app/routes/settings.tsx (loader/action, intent=menu.*), apps/web/app/routes/_app.tsx (loader에서 사이드바 렌더용 트리 조회), apps/web/app/routes/menu-placeholder.tsx (loader에서 커스텀 하위 메뉴 라벨 조회) — apps/web/app/features/sidebar-menu/model/sidebar-menu.repository.server.ts를 직접 호출
 Related frontend screens: /settings (메뉴 관리 탭), 전체 화면 공통 사이드바(_app.tsx), /menu/:slug (커스텀 하위 메뉴 스캐폴드 화면)
-Migration file: supabase/migrations/20260715060300_add_sidebar_menu_items.sql, supabase/migrations/20260716090000_add_work_orders_menu_route.sql(route check 제약 확장 + "작업지시서" 리프 시드), supabase/migrations/20260716120000_allow_custom_sidebar_menu_leaf_routes.sql(커스텀 "/menu/<slug>" 패턴 허용)
+Migration file: supabase/migrations/20260715060300_add_sidebar_menu_items.sql, supabase/migrations/20260716090000_add_work_orders_menu_route.sql(route check 제약 확장 + "작업지시서" 리프 시드), supabase/migrations/20260716120000_allow_custom_sidebar_menu_leaf_routes.sql(커스텀 "/menu/<slug>" 패턴 허용), supabase/migrations/20260910003931_remove_work_orders_menu_route.sql("작업지시서" 리프 삭제 + route check 제약을 5개로 축소)
 Notes:
   - 그룹 삭제(deleteMenuGroup)는 route가 not null인 리프(고정 화면)에는 적용할 수 없다(where route is null 조건으로 방어). 리프는 항상 어딘가(최상위 또는 그룹 하위)에 남아있어야 한다 — 사용자가 화면 자체를 메뉴에서 완전히 숨기는 기능은 이번 범위에 없다.
   - 최상위 항목의 placement를 바꾸면(setTopLevelMenuItemPlacement) 하위 메뉴도 함께 옮긴다(트리거가 불일치를 거부하기 때문에 repository에서 먼저 자식들을 갱신).
   - _app.tsx의 loader는 이 테이블 조회 실패 시(마이그레이션 미적용 등) apps/web/app/shared/config/nav.ts의 정적 배열로 폴백한다.
   - 그룹은 다른 그룹 아래에 중첩할 수 없다 — 설정 화면의 "상위 메뉴" 드롭다운은 그룹 행에서는 비활성화되어 있다(2단계 고정을 UI 레벨에서도 강제). 리프만 그룹 하위로 옮길 수 있다.
-  - "/work-orders"는 스캐폴드 화면(apps/web/app/routes/work-orders.tsx)만 있고 실제 기능(본사가 현장에 작업 지시를 발령하는 구조로 예정)은 아직 없다.
-  - 관리자가 만든 커스텀 하위 메뉴(createMenuLeaf)는 항상 그룹(parentId) 아래에만 만들 수 있고, route는 서버에서 randomUUID 앞 8자리로 자동 생성한다(`/menu/${slug}`). 삭제(deleteCustomMenuLeaf)는 route가 "/menu/"로 시작하는 행에만 적용되어 고정 6개 화면 리프가 실수로 지워지지 않는다. 사이드바에서는 아직 실제 화면이 없다는 표시로 기본 아이콘(FileQuestion, `sidebarMenuRouteIcon` 기본값)을 쓰고, 클릭하면 apps/web/app/routes/menu-placeholder.tsx의 공통 "준비 중" 화면으로 이동한다.
+  - 관리자가 만든 커스텀 하위 메뉴(createMenuLeaf)는 항상 그룹(parentId) 아래에만 만들 수 있고, route는 서버에서 randomUUID 앞 8자리로 자동 생성한다(`/menu/${slug}`). 사이드바에서는 아직 실제 화면이 없다는 표시로 기본 아이콘(FileQuestion, `sidebarMenuRouteIcon` 기본값)을 쓰고, 클릭하면 apps/web/app/routes/menu-placeholder.tsx의 공통 "준비 중" 화면으로 이동한다.
+  - 삭제(deleteMenuLeaf)는 route가 있는 리프 행이면 고정 화면/커스텀 메뉴 구분 없이 모두 삭제할 수 있다(그룹은 route is null이라 대상에서 제외되고 deleteMenuGroup으로만 삭제). 고정 화면 리프를 지워도 실제 라우트/페이지 코드는 그대로 남고 사이드바 메뉴 노출만 사라진다 — 다시 노출하려면 관리자가 메뉴 관리에서 그룹 하위 메뉴로 새로 추가해야 한다(코드상 route는 공유할 수 없으므로 새 커스텀 "/menu/<slug>" 항목으로 만들어진다).
 
 Schema: public
 Table: document_series
@@ -543,4 +543,126 @@ Migration file: supabase/migrations/20260716070000_add_document_revision_attachm
 Notes:
   - 리비전 삭제(deleteRevision) 시 첨부파일 storage 객체도 함께 정리한다(removeRevisionFiles가 document_revisions.storage_path와 document_revision_attachments.storage_path를 모두 조회해 일괄 삭제).
   - 추가/삭제만 가능하고 개별 첨부파일 교체 API는 없다 — document_revisions와 동일하게 리비전 자체를 삭제 후 재업로드한다.
+
+Schema: public
+Table: site_mail_posts
+Purpose: 현장별 중요메일 관리("부서별 업무기준"과 동일한 EML 업로드·정리 기능을 현장 단위로 제공, 2026-09-30 사용자 요청). standard_posts와 달리 분류 축이 부서가 아니라 현장(sites)이다. 구분자(카테고리)는 처음에는 standard_categories를 공유했으나, 2026-10-02부터 메일함 전용 site_mail_categories를 쓴다(본사와 현장 구분자 독립).
+Columns:
+  id uuid
+  site_id bigint (FK, on delete cascade)
+  category_id bigint (FK, on delete set null) -- site_mail_categories 참조(2026-10-02 이전에는 standard_categories)
+  title text
+  sender_email text
+  sender_name text
+  sent_at timestamptz
+  body_html text
+  body_text text
+  content_hash text        -- sha256(title|senderEmail|sentAt|bodyText), task-standards.parser.server.ts#parseStandardEml을 그대로 재사용해 계산
+  created_by text
+  updated_by text
+  created_at timestamptz
+  updated_at timestamptz
+Primary key: id
+Foreign keys: site_id -> site_mail_sites(id) on delete cascade (2026-10-01 이전에는 sites(id)), category_id -> site_mail_categories(id) on delete set null (2026-10-02 이전에는 standard_categories(id))
+Indexes: site_mail_posts_site_id_idx, site_mail_posts_category_id_idx, site_mail_posts_sent_at_idx (sent_at desc)
+Unique constraints: site_mail_posts_site_content_hash_key (site_id, content_hash) — 같은 메일이 여러 현장에 전달될 수 있어 전역이 아니라 현장 단위로만 중복을 막는다(standard_posts의 전역 unique와 다른 점).
+RLS policies: RLS enabled. site_mail_posts_no_direct_access(전체 거부, anon/authenticated) — service role로만 접근.
+RPC/functions: 없음
+Related APIs: apps/web/app/routes/site-mails.tsx (loader/action, intent=category.*/post.bulkUpdate/post.bulkDelete), apps/web/app/routes/site-mails-new.tsx (action: EML 파싱 후 insertSiteMailPost), apps/web/app/routes/site-mails-detail.tsx (loader/action: meta.update/attachment.*/post.delete) — apps/web/app/features/site-mails/model/site-mails.repository.server.ts를 직접 호출
+Related frontend screens: /site-mails, /site-mails/new, /site-mails/:postId
+Migration file: supabase/migrations/20260930090000_site_mails.sql, supabase/migrations/20261001090000_separate_site_mail_sites.sql(site_id FK 대상 교체), supabase/migrations/20261002090000_separate_site_mail_categories.sql(category_id FK 대상 교체)
+Notes:
+  - (2026-10-01 변경) 현장 목록은 대외기관 점검의 sites가 아니라 메일함 전용 site_mail_sites를 쓴다 — 두 메뉴의 현장 추가/삭제가 서로 연동되지 않는다.
+  - 쓰기 권한은 `requireSiteMailWriteAccess(request, siteId)`(`canWriteSiteMail`, features/site-mails/model/site-mail-access.server.ts)로 판정한다: 본사(admin/manager)는 모든 메일함 현장에, 현장(member) 계정은 site_mail_site_writers에 담당자로 지정된 현장에만 쓸 수 있다(2026-10-01 사용자 결정: "현장별 담당자 지정"). 대외기관 점검의 Member.siteId 기준(canWriteSite)과는 별개다. 읽기는 requireUser만으로 전체 공개.
+  - (2026-10-02 변경) 구분자는 메일함 현장별 site_mail_categories를 쓴다 — 한 현장에서 구분자를 추가·수정·삭제해도 다른 현장이나 부서별 업무기준(standard_categories)에는 반영되지 않는다. 관리 권한은 그 현장에 쓸 수 있는 계정(본사 또는 담당자, requireSiteMailWriteAccess).
+  - site-mails-detail.tsx의 action은 요청 본문의 siteId를 신뢰하지 않고, params.postId로 게시글을 먼저 조회해 실제 site_id로 권한을 검사한다. bulk 함수(bulkUpdateSiteMailPostMeta/bulkDeleteSiteMailPosts)도 update/delete 쿼리 자체에 `.eq("site_id", siteId)`를 포함해, 다른 현장 소속 id가 섞여 들어와도 영향을 주지 않는다.
+  - EML 파싱(task-standards.parser.server.ts#parseStandardEml)과 첨부 검증(task-standards.schema.ts)을 그대로 재사용한다 — 로직이 도메인 특화적이지 않아 site-mails 전용 복제본을 두지 않았다.
+
+Schema: public
+Table: site_mail_attachments
+Purpose: site_mail_posts에 종속된 첨부파일 메타. 실제 파일 바이너리는 Storage 버킷 site-mails에 저장한다.
+Columns:
+  id uuid
+  post_id uuid (FK, on delete cascade)
+  filename text
+  storage_path text
+  mime_type text
+  created_at timestamptz
+Primary key: id
+Foreign keys: post_id -> site_mail_posts(id) on delete cascade
+Indexes: site_mail_attachments_post_id_idx
+Unique constraints: 없음
+RLS policies: RLS enabled. site_mail_attachments_no_direct_access(전체 거부, anon/authenticated).
+RPC/functions: 없음
+Related APIs: apps/web/app/features/site-mails/model/site-mails.repository.server.ts (addSiteMailAttachment/deleteSiteMailAttachment/getSiteMailAttachmentDownloadUrl/getSiteMailAttachmentFile)
+Related frontend screens: /site-mails/:postId (첨부 목록/추가/삭제), /site-mails/attachments/:attachmentId/download
+Migration file: supabase/migrations/20260930090000_site_mails.sql
+Notes:
+  - Storage 버킷 site-mails는 task-standards와 동일하게 private(public=false)이며 서버가 service role key로만 업로드하고 다운로드는 signed URL(TTL 300초)로 발급한다.
+  - sidebar_menu_items_route_check에 "/site-mails"를 추가해 고정 화면을 5개 -> 6개로 확장했다(같은 migration). "현장" 그룹이 있으면 그 하위에, 없으면 최상위에 "현장 메일함" 리프를 시드한다(20260716090000_add_work_orders_menu_route.sql과 동일 패턴).
+
+Schema: public
+Table: site_mail_sites
+Purpose: 현장 메일함(/site-mails) 전용 현장 목록(2026-10-01 사용자 요청으로 대외기관 점검의 sites에서 분리). 이 표의 추가·삭제는 sites/site_inspections에 영향을 주지 않는다.
+Columns:
+  id bigint (identity, by default)
+  name text
+  sort_order int
+  created_at timestamptz
+  updated_at timestamptz
+Primary key: id
+Foreign keys: 없음
+Indexes: 없음(행 수가 현장 수 수준)
+Unique constraints: name
+RLS policies: RLS enabled. site_mail_sites_no_direct_access(전체 거부, anon/authenticated).
+RPC/functions: 없음
+Related APIs: apps/web/app/routes/site-mails.tsx (action intent=site.create/site.rename/site.delete/site.reorder/site.setWriters, 본사 전용) — features/site-mails/model/site-mail-sites.repository.server.ts
+Related frontend screens: /site-mails (헤더의 "현장 관리" 팝업, 현장 탭), /site-mails/new (업로드 대상 현장 선택)
+Migration file: supabase/migrations/20261001090000_separate_site_mail_sites.sql
+Notes:
+  - 마이그레이션 시점의 sites 행을 같은 id로 복사해 기존 site_mail_posts.site_id가 그대로 유효하도록 했고, 이후 identity 시퀀스를 max(id) 뒤로 맞췄다. 복사 이후 두 목록은 완전히 독립적이다.
+  - 삭제 시 site_mail_posts/site_mail_attachments는 cascade로 지워지고, Storage 파일은 deleteSiteMailSite가 먼저 정리한다. UI에서 확인 패널을 거친다.
+
+Schema: public
+Table: site_mail_site_writers
+Purpose: 메일함 현장별 담당자(쓰기 권한이 있는 현장 계정). 본사 계정은 여기 없어도 항상 쓰기 가능.
+Columns:
+  site_id bigint (FK, on delete cascade)
+  member_id text (FK, on delete cascade)
+  created_at timestamptz
+Primary key: (site_id, member_id)
+Foreign keys: site_id -> site_mail_sites(id) on delete cascade, member_id -> members(id) on delete cascade
+Indexes: site_mail_site_writers_member_id_idx
+Unique constraints: PK
+RLS policies: RLS enabled. site_mail_site_writers_no_direct_access(전체 거부, anon/authenticated).
+RPC/functions: 없음
+Related APIs: apps/web/app/routes/site-mails.tsx (intent=site.setWriters — 목록 통째 교체), features/site-mails/model/site-mail-access.server.ts#canWriteSiteMail
+Related frontend screens: /site-mails "현장 관리" 팝업의 "담당자" 버튼
+Migration file: supabase/migrations/20261001090000_separate_site_mail_sites.sql
+Notes:
+  - 마이그레이션 시점에 members.site_id가 있던 현장(member) 계정을 해당 현장의 담당자로 옮겨, 분리 전과 같은 쓰기 권한을 보존했다.
+Schema: public
+Table: site_mail_categories
+Purpose: 현장 메일함(/site-mails) 전용 구분자(2026-10-02 사용자 요청으로 standard_categories에서 분리 — "본사와 현장은 별개, 현장은 입맛에 맞게 바꿔 쓴다"). 같은 날 현장별 목록으로 확장("각 현장별로도 구분자는 각각 관리") — 현장마다 독립적인 구분자 세트를 갖는다.
+Columns:
+  id bigint (identity, by default)
+  site_id bigint not null (FK, on delete cascade) -- 소속 메일함 현장
+  name text
+  color text (default '#6b7280')
+  sort_order int
+  created_at timestamptz
+Primary key: id
+Foreign keys: site_id -> site_mail_sites(id) on delete cascade
+Indexes: site_mail_categories_site_id_idx
+Unique constraints: site_mail_categories_site_name_key (site_id, name) — 같은 이름도 현장이 다르면 따로 만들 수 있다
+RLS policies: RLS enabled. site_mail_categories_no_direct_access(전체 거부, anon/authenticated).
+RPC/functions: 없음
+Related APIs: apps/web/app/routes/site-mails.tsx (intent=category.*, { siteId } 필수, requireSiteMailWriteAccess — 본사 또는 그 현장 담당자) — features/site-mails/model/site-mail-categories.repository.server.ts
+Related frontend screens: /site-mails (구분자 탭 + 구분자 관리 팝업), /site-mails/new, /site-mails/:postId
+Migration file: supabase/migrations/20261002090000_separate_site_mail_categories.sql, supabase/migrations/20261002120000_site_mail_categories_per_site.sql(site_id 추가)
+Notes:
+  - 마이그레이션 시점의 standard_categories 행을 같은 id로 복사해 기존 site_mail_posts.category_id가 그대로 유효하도록 했다. 복사 이후 두 목록은 완전히 독립적이다.
+  - 삭제 시 해당 구분자의 메일은 category_id=NULL로 정리한다.
+  - 20261002120000에서 당시 공유 목록을 현장마다 한 벌씩 복사하고 메일의 category_id를 같은 현장·같은 이름 복사본으로 옮겼다. 이후 새로 만든 현장은 빈 목록으로 시작한다.
+  - 메일의 category_id가 같은 현장 소속인지는 DB 제약이 아니라 앱(assertSiteMailCategory, 업로드 시 현장 구분자 집합 검사)에서 보장한다. 수정·삭제·순서 변경 쿼리도 모두 site_id로 좁힌다.
 ```

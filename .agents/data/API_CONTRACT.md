@@ -119,14 +119,55 @@ Allowed roles: admin, manager
 Request body: intent별로 id/label/placement, 또는 id/parentId, 또는 label/parentId/placement(menu.createLeaf), 또는 items(JSON, [{id, sortOrder}])
 Response: 성공 시 { ok: true }. 실패 시 { error: string }(400)
 Error codes: "메뉴 제목을 입력하세요.", "그룹 이름을 입력하세요.", "하위 메뉴 이름을 입력하세요.", DB 트리거 위반 시 "사이드바 메뉴는 2단계까지만 허용됩니다" 등
-Related repository: sidebar-menu.repository.server.ts#renameMenuItem/createMenuGroup/deleteMenuGroup/createMenuLeaf/deleteCustomMenuLeaf/setMenuItemParent/setTopLevelMenuItemPlacement/reorderMenuItems
-Notes: 고정 6개 화면의 route는 코드/마이그레이션으로만 추가한다 — 이 action으로 바꿀 수 없다. menu.createLeaf는 그 대신 아직 실제 화면이 없는 "/menu/<slug>" 커스텀 하위 메뉴를 그룹(parentId) 아래에 만든다(라벨/순서/배치만 관리자가 정하고 route는 서버가 자동 생성). menu.deleteLeaf는 route가 "/menu/"로 시작하는 행만 삭제한다.
+Related repository: sidebar-menu.repository.server.ts#renameMenuItem/createMenuGroup/deleteMenuGroup/createMenuLeaf/deleteMenuLeaf/setMenuItemParent/setTopLevelMenuItemPlacement/reorderMenuItems
+Notes: 고정 화면의 route 자체(코드/마이그레이션)는 이 action으로 바꿀 수 없다. menu.createLeaf는 아직 실제 화면이 없는 "/menu/<slug>" 커스텀 하위 메뉴를 그룹(parentId) 아래에 만든다(라벨/순서/배치만 관리자가 정하고 route는 서버가 자동 생성). menu.deleteLeaf는 route가 있는 리프 행이면 고정 화면/커스텀 메뉴 구분 없이 삭제한다 — 사이드바 노출만 사라지고 실제 라우트/페이지 코드는 그대로 남는다(그룹은 deleteMenuGroup으로만 삭제 가능).
 
 Route: GET /menu/:slug (routes/menu-placeholder.tsx loader)
 Purpose: 관리자가 menu.createLeaf로 만든 커스텀 하위 메뉴가 연결되는 공통 "준비 중" 스캐폴드 화면
 Auth required: 로그인 (requireUser)
 Response: { menuItem: SidebarMenuItem | null } — null이면 화면에서 "메뉴를 찾을 수 없습니다" EmptyState 표시
 Related repository: sidebar-menu.repository.server.ts#findMenuItemByRoute
+
+Route: GET /site-mails (routes/site-mails.tsx loader)
+Purpose: 현장별 중요메일 목록 조회(현장 탭 + 구분자 탭 + 검색/정렬/페이지네이션)
+Auth required: 로그인 (requireUser)
+Allowed roles: admin/manager/member 전체 조회 가능(다른 현장 자료도 열람 가능). canWrite(canWriteSite: 본사는 전체, 현장은 자기 현장만)만 EML 업로드/일괄 수정·삭제 UI 노출. canWrite인 계정이 선택 현장의 구분자 관리 UI 사용(2026-10-02 현장별 구분자)
+Request params: ?site=<id>&cat=<id|null>&q=&sort=sent_desc|sent_asc|created_desc|created_asc&page=
+Response: { sites: Site[], selectedSite: Site | null, categories: StandardCategory[](선택 현장 것만), postList: SiteMailPostListResult, canManageSites: boolean, writerCandidates, canWrite: boolean }
+Related repository: site-mails.repository.server.ts#listSiteMailPosts, site-mail-sites.repository.server.ts#listSiteMailSites, site-mail-categories.repository.server.ts#listSiteMailCategories
+
+Route: POST /site-mails (routes/site-mails.tsx action, intent=site.*|site.setWriters|category.*|post.bulkUpdate|post.bulkDelete)
+Purpose: 현장 관리(메일함 전용 site_mail_sites 추가·수정·삭제·순서 변경·담당자 지정 — /sites의 현장과 연동되지 않음, 2026-10-01), 구분자 관리(메일함 현장별 site_mail_categories — 다른 현장·부서 화면 구분자와 연동되지 않음, 2026-10-02), 선택한 메일 일괄 구분자 적용/삭제
+Auth required: site.*는 로그인 + 본사 권한(requireHeadquarters). category.*/post.bulkUpdate/post.bulkDelete는 requireSiteMailWriteAccess(request, siteId)(본사 또는 해당 메일함 현장 담당자)
+Request body: site.create/rename은 { name, id? }(주소 없음), site.delete는 { id }, site.reorder는 { items: JSON }, site.setWriters는 { id, memberIds: JSON(string[]) }. category.*는 task-standards의 동일 intent 본문 + { siteId }(필수, 그 현장의 구분자만 수정됨). post.bulkUpdate의 categoryId는 같은 현장 구분자여야 한다(아니면 400). post.bulkUpdate/bulkDelete는 { siteId, ids: JSON, categoryId? }
+Response: 성공 시 { ok: true }. 실패 시 { error: string }(400)
+Related repository: site-mail-sites.repository.server.ts#createSiteMailSite/renameSiteMailSite/deleteSiteMailSite/reorderSiteMailSites/setSiteMailSiteWriters, site-mail-categories.repository.server.ts#createSiteMailCategory/renameSiteMailCategory/deleteSiteMailCategory/reorderSiteMailCategories, site-mails.repository.server.ts#bulkUpdateSiteMailPostMeta/bulkDeleteSiteMailPosts
+Notes: bulk 함수는 update/delete 쿼리 자체를 site_id로도 좁혀서, 요청의 siteId를 통과했더라도 실제로는 다른 현장 소속인 id는 조용히 무시된다.
+
+Route: GET/POST /site-mails/new (routes/site-mails-new.tsx loader/action)
+Purpose: .eml 파일 여러 건 업로드(최대 30개) → 파싱 → 현장 단위 중복 해시 검사 → Storage 저장 → DB insert
+Auth required: 로그인 + 해당 현장 쓰기 권한(requireSiteWriteAccess, site_id는 request body의 site_id로 조회한 sites row 존재 확인 후 판정)
+Request body: multipart/form-data { site_id, eml: File[], category_ids: JSON string[] }
+Response: { results: {name, id}[], errors: {name, error}[] }. 폼 자체 오류는 { formError: string }(400)
+Error codes: 미지원 확장자/개수/크기 초과, 파싱 실패, "이미 등록된 메일입니다"(site_id+content_hash unique 충돌), "현장을 찾을 수 없습니다."
+Related repository: task-standards.parser.server.ts#parseStandardEml(재사용), site-mails.repository.server.ts#findSiteMailByContentHash/insertSiteMailPost
+
+Route: GET /site-mails/:postId (routes/site-mails-detail.tsx loader)
+Purpose: 현장 메일 상세 조회 + 첨부파일 signed URL(5분 유효) 발급
+Auth required: 로그인 (requireUser)
+Response: { post: SiteMailPost | null, categories: StandardCategory[], attachmentUrls: Record<string,string>, canWrite: boolean }
+Related repository: site-mails.repository.server.ts#getSiteMailPostById, #getSiteMailAttachmentDownloadUrl
+
+Route: POST /site-mails/:postId (routes/site-mails-detail.tsx action, intent=meta.update|attachment.add|attachment.rename|attachment.delete|post.delete)
+Purpose: 제목/구분자/본문 수정, 첨부파일 추가/이름수정/삭제, 게시글 삭제
+Auth required: 로그인 + 이 게시글이 속한 현장의 쓰기 권한. params.postId로 게시글을 먼저 조회해 실제 site_id를 기준으로 requireSiteWriteAccess를 한 번만 검사한다(요청 본문의 값을 신뢰하지 않음) — 모든 intent가 같은 postId에 대해 동작하므로 action 진입 시 단 한 번만 검사
+Response: 성공 시 { ok: true }(post.delete는 redirect(/site-mails)). 실패 시 { error: string }(400)
+Related repository: site-mails.repository.server.ts#updateSiteMailPostMeta/addSiteMailAttachment/renameSiteMailAttachment/deleteSiteMailAttachment/deleteSiteMailPost
+
+Route: GET /site-mails/attachments/:attachmentId/download (routes/site-mails-attachment-download.tsx loader)
+Purpose: 첨부파일 원본 다운로드(브라우저 저장 강제, Content-Disposition: attachment)
+Auth required: 로그인 (requireUser)
+Related repository: site-mails.repository.server.ts#getSiteMailAttachmentFile
 
 Route: GET / (모든 화면 공통, routes/_app.tsx loader)
 Purpose: 로그인 사용자 확인 + 사이드바 렌더용 메뉴 트리 조회(DB 우선, 실패 시 nav.ts 정적 배열로 폴백)

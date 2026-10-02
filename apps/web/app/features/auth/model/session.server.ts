@@ -2,7 +2,11 @@ import { createCookieSessionStorage, redirect } from "react-router"
 import { canWriteSite, isHeadquarters, type Member } from "~/entities/member/model/member"
 import { getMemberById } from "~/features/members/model/members.repository.server"
 
-// TODO[security]: 데모용 기본 시크릿. 운영에서는 반드시 SESSION_SECRET 환경변수를 설정한다.
+// 개발용 기본 시크릿은 로컬에서만 허용한다. 운영(NODE_ENV=production)에서 SESSION_SECRET이 없으면
+// 누구나 아는 기본값으로 세션 쿠키가 서명되므로 서버 기동 자체를 막는다.
+if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET 환경변수가 설정되지 않았습니다. 운영 배포에는 반드시 필요합니다.")
+}
 const sessionSecret = process.env.SESSION_SECRET ?? "dev-insecure-session-secret-change-me"
 
 const storage = createCookieSessionStorage({

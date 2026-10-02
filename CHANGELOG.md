@@ -8,6 +8,36 @@
 
 ---
 
+## [2.8-draft] - 2026-10-01
+
+### 추가
+- **Render 배포 설정** — 루트 `render.yaml`(Blueprint) 추가. Node web service `lynn-connect`(singapore, free 플랜), main merge 시 자동 배포, 비밀 환경변수는 대시보드 입력(`sync: false`)·`SESSION_SECRET`은 자동 생성. `.agents/DEPLOYMENT.md`에 "0. Project Override: Render" 장 추가(Cloudflare 기준보다 우선), `AGENTS.md` 기술 추가 사항의 배포 항목 갱신.
+
+### 변경
+- **현장 메일함 현장 목록 분리** (`/site-mails`) — 메일함에서 현장을 삭제하면 대외기관 점검(`/sites`)의 현장과 점검 기록까지 함께 지워지던 문제를 막기 위해, 메일함 전용 현장 목록(`site_mail_sites`)을 따로 두고 두 메뉴의 현장 추가·삭제를 완전히 분리. 쓰기 권한은 메일함 현장별 "담당자"(`site_mail_site_writers`, 현장 관리 팝업에서 지정)로 판정(본사는 항상 가능). 현장 관리 팝업에서 주소 입력 제거, 삭제 시 확인 패널 추가, 업로드 화면은 쓸 수 있는 현장만 표시. DB: `supabase/migrations/20261001090000_separate_site_mail_sites.sql`(기존 현장·메일·현장 계정 권한은 그대로 이관).
+- **현장 메일함 구분자 분리** (`/site-mails`) — 메일함의 구분자 관리가 부서별 업무기준의 `standard_categories`를 그대로 수정해 본사 구분자까지 바뀌던 문제를 막기 위해, 메일함 전용 구분자(`site_mail_categories`)를 따로 둠. 이제 현장 메일함에서 구분자를 추가·수정·삭제해도 본사 화면에는 영향 없음. DB: `supabase/migrations/20261002090000_separate_site_mail_categories.sql`(현재 구분자를 같은 id로 복사해 출발점으로 사용, 본사 구분자는 업무기준/시공기준/기 타로 복원).
+- **현장 메일함 구분자를 현장별로 관리** (`/site-mails`) — 구분자를 메일함 현장마다 따로 두어, 한 현장에서 바꿔도 다른 현장에 영향 없음. 구분자 관리는 그 현장에 쓸 수 있는 계정(본사 또는 현장 담당자)이 직접 할 수 있고, 업로드·상세·일괄 변경에서는 그 현장의 구분자만 고를 수 있음. 새 현장은 빈 구분자 목록으로 시작. DB: `supabase/migrations/20261002120000_site_mail_categories_per_site.sql`(기존 현장 2곳에는 현재 구분자 4개를 각각 복사).
+
+### 보안
+- 운영 모드(`NODE_ENV=production`)에서 `SESSION_SECRET`이 없으면 서버 기동을 거부하도록 변경(누구나 아는 개발용 기본 시크릿으로 세션 쿠키가 서명되는 것 방지).
+- `.claude/settings.json` 권한 허용 목록에 남아 있던 일회성 테스트 명령(데모 계정 이메일/비밀번호 포함) 제거.
+
+---
+
+## [2.7-draft] - 2026-10-01
+
+### 추가
+- **현장별 중요메일** (`/site-mails`) — "부서별 업무기준"과 동일한 EML 업로드·정리 기능을 현장 단위로 제공. 분류 축이 부서 대신 현장(sites)이며, 구분자(카테고리)는 `standard_categories`를 그대로 재사용해 부서 화면과 taxonomy를 공유한다. `site_inspections`와 동일하게 본사(admin/manager)는 모든 현장에, 현장(member) 계정은 자신이 소속된 현장의 메일만 업로드·수정·삭제할 수 있다(구분자 자체의 생성/수정/삭제는 부서 화면과 동일하게 본사 전용). 사이드바 메뉴가 가리킬 수 있는 고정 화면을 5개 → 6개로 확장. DB: `supabase/migrations/20260930090000_site_mails.sql`(`site_mail_posts`/`site_mail_attachments` 테이블, `site-mails` storage 버킷, `sidebar_menu_items_route_check` 확장 + "현장" 그룹 하위 "현장 메일함" 리프 시드).
+- **업무기준 본문 수정·첨부 직접 다운로드** (`/standards/:postId`) — 상세 화면에서 본문(텍스트/HTML)을 직접 편집할 수 있게 하고 길이 검증(`validateBodyText`/`validateBodyHtml`) 추가. 첨부파일을 서버 경유로 내려받는 `/standards/attachments/:attachmentId/download` 라우트 추가. EML 파싱 시 `Content-Disposition: inline` 이미지가 첨부파일로 잡히지 않도록 필터 보강.
+
+### 변경
+- **현장 메일함 화면 개선** (`/site-mails`, 2026-10-01) — 현장 탭 아래 주소 표시 제거. 대외기관 점검과 동일한 "현장 관리" 버튼(본사 전용)을 헤더에 추가해 이 화면에서 바로 현장 추가·수정·삭제·순서 변경 가능(현장 카탈로그는 `/sites`와 공유). "구분자 관리"는 구분자 탭 줄 오른쪽으로, "EML 업로드"는 목록 카드의 정렬 옆으로 이동. 선택한 현장이 삭제되면 첫 번째 현장으로 자동 전환.
+- 메뉴 관리(`/settings`)에서 커스텀(`/menu/*`) 리프뿐 아니라 고정 화면 리프도 사이드바에서 삭제할 수 있게 변경(라우트/페이지 코드는 유지되고 사이드바 노출만 사라짐).
+- `/sites` 상위 탭 "점검 프로세스" → "점검 대응 프로세스"로 이름 변경, 대시보드 배너 시계에 `tabular-nums` 적용.
+- `.agents/data/MIGRATION.md` Migration Log에 누락돼 있던 `20260930090000_site_mails.sql` 항목 추가(2026-10-01). `20260910003931` 적용 후에 적용해야 한다는 순서 제약 명시.
+
+---
+
 ## [2.6-draft] - 2026-07-16
 
 ### 추가
@@ -16,7 +46,7 @@
 - **현장 점검 결과보고 확장** (`/sites`) — 점검 기록에 점검취지/점검자/점검내용/결과상세/지적사항 등 결과보고 양식 필드 추가, 점검 기록 수정(update) API 신설, 결과보고 양식 인쇄 전용 화면(`/sites/:siteId/inspections/:inspectionId/print`) 추가. 상위 탭을 "점검 프로세스"(대외기관 점검 대응 기준 고정 안내) / "현장 점검결과"(현장별 점검 이력) / "AI 분석" 3개로 재구성. DB: `supabase/migrations/20260714090509_add_site_inspection_report_fields.sql`.
 - **현장 점검 AI 문답** ("AI 분석" 탭) — 전체 현장의 점검 기록을 근거로 Claude(`claude-haiku-4-5`)와 채팅형으로 질문/답변(멀티턴). 법령 확인이 필요한 질문은 `web_search` 도구로 국가법령정보센터(law.go.kr)를 검색해 근거 조문을 인용. 시작 시 "대화는 저장되지 않음" 안내 팝업, 인쇄(새 창 출력) 버튼, 실패 시 재시도 버튼 제공. 신규 의존성: `@anthropic-ai/sdk`(`ANTHROPIC_API_KEY` 필요), `zod` 3.25로 업그레이드.
 - **문서 리비전 첨부파일 확장** (`/documents`) — 메인 PDF(diff 비교 대상)와 별개로 여러 개의 참고용 서브 파일을 첨부할 수 있게 확장, 리비전 이력에서 메인/서브 구분 표시. DB: `supabase/migrations/20260716070000_add_document_revision_attachments.sql`.
-- **작업지시서 스캐폴드** (`/work-orders`) — 사이드바 메뉴가 가리킬 수 있는 고정 화면을 5개→6개로 확장. 라우트/메뉴만 있고 실제 기능(본사가 현장에 작업 지시를 발령하는 구조)은 후속 작업에서 구현 예정. DB: `supabase/migrations/20260716090000_add_work_orders_menu_route.sql`.
+- **작업지시서 스캐폴드** (`/work-orders`) — 사이드바 메뉴가 가리킬 수 있는 고정 화면을 5개→6개로 확장. 라우트/메뉴만 있고 실제 기능(본사가 현장에 작업 지시를 발령하는 구조)은 후속 작업에서 구현 예정. DB: `supabase/migrations/20260716090000_add_work_orders_menu_route.sql`. (2026-09-10 사용자 요청으로 스캐폴드 전체 제거, 아래 "제거" 항목 참고.)
 - 사이드바 상위 탭(폴더 형태)과 하위 탭(알약 형태)을 구분하는 `Tabs` `variant` 옵션 추가, 사이드바 최상위 메뉴(그룹/최상위 링크) 폰트를 크고 굵게 강조.
 
 ### 보안
@@ -24,6 +54,9 @@
 
 ### 변경
 - `apps/web/README.md`의 예전 데모 계정표(고정 이메일/평문 비밀번호 안내)를 제거하고, 실제 계정은 Supabase에서 관리하며 로그인 정보는 문서에 남기지 않는다는 안내로 대체.
+
+### 제거 (2026-09-10)
+- **작업지시서 스캐폴드** (`/work-orders`) — 빈 스캐폴드 상태로 남아있던 화면/라우트/사이드바 메뉴를 통째로 제거(사용자 요청). `apps/web/app/routes/work-orders.tsx` 삭제, `routes.ts`/`shared/config/nav.ts`/`entities/sidebar-menu/model/sidebar-menu.types.ts`에서 관련 항목 제거. 사이드바 메뉴가 가리킬 수 있는 고정 화면을 6개 → 5개로 되돌림. DB: `supabase/migrations/20260910003931_remove_work_orders_menu_route.sql`(해당 리프 행 삭제 + route check 제약 축소).
 
 ---
 

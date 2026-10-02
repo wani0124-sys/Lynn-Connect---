@@ -9,21 +9,20 @@ import {
   type LoaderFunctionArgs,
 } from "react-router"
 import { Check, Download, ExternalLink, List, Paperclip, Pencil, Trash2, Upload, X } from "lucide-react"
-import { buildDepartmentOptions } from "~/entities/task-standard/lib/build-department-options"
 import { CategoryBadge } from "~/entities/task-standard/ui/category-badge"
-import { isHeadquarters } from "~/entities/member/model/member"
-import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
+import { requireUser } from "~/features/auth/model/session.server"
+import { canWriteSiteMail, requireSiteMailWriteAccess } from "~/features/site-mails/model/site-mail-access.server"
+import { getSiteMailSiteById } from "~/features/site-mails/model/site-mail-sites.repository.server"
 import {
-  addAttachment,
-  deleteAttachment,
-  deletePost,
-  getAttachmentDownloadUrl,
-  getPostById,
-  listCategories,
-  listDepartments,
-  renameAttachment,
-  updatePostMeta,
-} from "~/features/task-standards/model/task-standards.repository.server"
+  addSiteMailAttachment,
+  deleteSiteMailAttachment,
+  deleteSiteMailPost,
+  getSiteMailAttachmentDownloadUrl,
+  getSiteMailPostById,
+  renameSiteMailAttachment,
+  updateSiteMailPostMeta,
+} from "~/features/site-mails/model/site-mails.repository.server"
+import { assertSiteMailCategory, listSiteMailCategories } from "~/features/site-mails/model/site-mail-categories.repository.server"
 import {
   validateAttachmentFile,
   validateAttachmentFilename,
@@ -42,42 +41,45 @@ import { Select } from "~/shared/ui/select"
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const user = await requireUser(request)
   const postId = params.postId ?? ""
-  const [post, departments, categories] = await Promise.all([getPostById(postId), listDepartments(), listCategories()])
+  const post = await getSiteMailPostById(postId)
+  // 구분자는 현장마다 따로이므로 이 메일이 속한 현장의 목록만 보여준다.
+  const categories = post ? await listSiteMailCategories(post.siteId) : []
 
   let attachmentUrls: Record<string, string> = {}
   if (post && post.attachments.length > 0) {
     const entries = await Promise.all(
-      post.attachments.map(async (att) => [att.id, (await getAttachmentDownloadUrl(att.id))?.url ?? null] as const),
+      post.attachments.map(async (att) => [att.id, (await getSiteMailAttachmentDownloadUrl(att.id))?.url ?? null] as const),
     )
     attachmentUrls = Object.fromEntries(entries.filter((entry): entry is [string, string] => entry[1] !== null))
   }
 
-  return { post, departments, categories, attachmentUrls, canManage: isHeadquarters(user.role) }
+  const site = post ? await getSiteMailSiteById(post.siteId) : null
+  return { post, categories, attachmentUrls, canWrite: site ? canWriteSiteMail(user, site) : false }
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
-  const user = await requireHeadquarters(request)
   const postId = params.postId ?? ""
+  // 이 라우트의 모든 intent는 같은 postId(URL 파라미터)에 대해 동작하므로, 요청 본문이 아니라
+  // 게시글의 실제 소속 현장(site_id)을 기준으로 쓰기 권한을 한 번만 검사한다(클라이언트가 보낸 값을
+  // 신뢰하지 않는다). requireSiteMailWriteAccess가 던지는 redirect는 아래 try/catch 밖에서 그대로 전파돼야
+  // 하므로(잡히면 안 됨) try 진입 전에 호출한다 — task-standards.detail의 requireHeadquarters 선행 호출과 동일 패턴.
+  const existingPost = await getSiteMailPostById(postId)
+  if (!existingPost) throw new Response("Not Found", { status: 404 })
+  const { user } = await requireSiteMailWriteAccess(request, existingPost.siteId)
+
   const form = await request.formData()
   const intent = String(form.get("intent") ?? "")
 
   try {
     switch (intent) {
       case "meta.update": {
-        const departmentIdRaw = form.get("departmentId")
         const categoryIdRaw = form.get("categoryId")
         const titleRaw = form.get("title")
         const bodyTextRaw = form.get("bodyText")
         const bodyHtmlRaw = form.get("bodyHtml")
-        const fields: {
-          departmentId?: number | null
-          categoryId?: number | null
-          title?: string
-          bodyText?: string
-          bodyHtml?: string | null
-        } = {}
-        if (departmentIdRaw !== null) fields.departmentId = departmentIdRaw ? Number(departmentIdRaw) : null
+        const fields: { categoryId?: number | null; title?: string; bodyText?: string; bodyHtml?: string | null } = {}
         if (categoryIdRaw !== null) fields.categoryId = categoryIdRaw ? Number(categoryIdRaw) : null
+        if (fields.categoryId !== undefined) await assertSiteMailCategory(existingPost.siteId, fields.categoryId)
         if (titleRaw !== null) {
           const title = String(titleRaw).trim()
           const validationError = validateTitle(title)
@@ -85,7 +87,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
           fields.title = title
         }
         // bodyText/bodyHtml은 실제로 화면에 표시되던(=수정 대상이던) 쪽만 전달되며, 반대쪽 필드는 건드리지 않는다.
-        // 인라인 이미지 등은 bodyHtml 안에 포함되므로, 여기서 상대 필드를 null로 지우면 이미지가 함께 삭제된다.
         if (bodyTextRaw !== null) {
           const bodyText = String(bodyTextRaw)
           const validationError = validateBodyText(bodyText)
@@ -98,7 +99,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           if (validationError) return data({ error: validationError }, { status: 400 })
           fields.bodyHtml = bodyHtml
         }
-        await updatePostMeta(postId, fields, user.id)
+        await updateSiteMailPostMeta(postId, fields, user.id)
         return { ok: true }
       }
       case "attachment.add": {
@@ -107,23 +108,23 @@ export async function action({ request, params }: ActionFunctionArgs) {
         const validationError = validateAttachmentFile(file)
         if (validationError) return data({ error: validationError }, { status: 400 })
         const buffer = Buffer.from(await file.arrayBuffer())
-        await addAttachment(postId, { filename: file.name, mimeType: file.type || null, content: buffer })
+        await addSiteMailAttachment(postId, { filename: file.name, mimeType: file.type || null, content: buffer })
         return { ok: true }
       }
       case "attachment.rename": {
         const filename = String(form.get("filename") ?? "").trim()
         const validationError = validateAttachmentFilename(filename)
         if (validationError) return data({ error: validationError }, { status: 400 })
-        await renameAttachment(String(form.get("id") ?? ""), filename)
+        await renameSiteMailAttachment(String(form.get("id") ?? ""), filename)
         return { ok: true }
       }
       case "attachment.delete": {
-        await deleteAttachment(String(form.get("id") ?? ""))
+        await deleteSiteMailAttachment(String(form.get("id") ?? ""))
         return { ok: true }
       }
       case "post.delete": {
-        await deletePost(postId)
-        return redirect("/standards")
+        await deleteSiteMailPost(postId)
+        return redirect("/site-mails")
       }
       default:
         return data({ error: "알 수 없는 요청입니다." }, { status: 400 })
@@ -134,8 +135,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 }
 
-export default function StandardsDetailRoute() {
-  const { post, departments, categories, attachmentUrls, canManage } = useLoaderData<typeof loader>()
+export default function SiteMailsDetailRoute() {
+  const { post, categories, attachmentUrls, canWrite } = useLoaderData<typeof loader>()
   const metaFetcher = useFetcher<typeof action>()
   const attachmentFetcher = useFetcher<typeof action>()
   const deleteFetcher = useFetcher<typeof action>()
@@ -145,7 +146,6 @@ export default function StandardsDetailRoute() {
   const [editingAttachmentId, setEditingAttachmentId] = useState<string | null>(null)
   const [attachmentFilenameDraft, setAttachmentFilenameDraft] = useState("")
   const [isEditingClassification, setIsEditingClassification] = useState(false)
-  const [departmentDraft, setDepartmentDraft] = useState(String(post?.departmentId ?? ""))
   const [categoryDraft, setCategoryDraft] = useState(String(post?.categoryId ?? ""))
   const [isEditingBody, setIsEditingBody] = useState(false)
   const [bodyDraft, setBodyDraft] = useState(post?.bodyHtml ?? post?.bodyText ?? "")
@@ -161,9 +161,8 @@ export default function StandardsDetailRoute() {
   }, [post?.bodyHtml, post?.bodyText])
 
   useEffect(() => {
-    setDepartmentDraft(String(post?.departmentId ?? ""))
     setCategoryDraft(String(post?.categoryId ?? ""))
-  }, [post?.departmentId, post?.categoryId])
+  }, [post?.categoryId])
 
   if (!post) {
     return (
@@ -172,7 +171,7 @@ export default function StandardsDetailRoute() {
           title="게시글을 찾을 수 없습니다."
           description="삭제되었거나 잘못된 주소입니다."
           action={
-            <Link to="/standards">
+            <Link to="/site-mails">
               <Button variant="outline">목록으로</Button>
             </Link>
           }
@@ -181,9 +180,7 @@ export default function StandardsDetailRoute() {
     )
   }
 
-  const departmentOptions = buildDepartmentOptions(departments)
   const sortedCategories = [...categories].sort((a, b) => a.sortOrder - b.sortOrder)
-  const currentDepartment = post.departmentId ? (departments.find((d) => d.id === post.departmentId) ?? null) : null
   const currentCategory = post.categoryId ? (categories.find((c) => c.id === post.categoryId) ?? null) : null
   const actionError =
     (metaFetcher.data && "error" in metaFetcher.data && metaFetcher.data.error) ||
@@ -235,24 +232,21 @@ export default function StandardsDetailRoute() {
   }
 
   const cancelClassificationEdit = () => {
-    setDepartmentDraft(String(post.departmentId ?? ""))
     setCategoryDraft(String(post.categoryId ?? ""))
     setIsEditingClassification(false)
   }
 
   const saveClassificationEdit = () => {
-    const currentDeptValue = String(post.departmentId ?? "")
     const currentCatValue = String(post.categoryId ?? "")
-    if (departmentDraft === currentDeptValue && categoryDraft === currentCatValue) {
+    if (categoryDraft === currentCatValue) {
       cancelClassificationEdit()
       return
     }
-    metaFetcher.submit({ intent: "meta.update", departmentId: departmentDraft, categoryId: categoryDraft }, { method: "post" })
+    metaFetcher.submit({ intent: "meta.update", categoryId: categoryDraft }, { method: "post" })
     setIsEditingClassification(false)
   }
 
   // bodyHtml이 있으면 화면에는 항상 HTML이 렌더링되므로, 수정도 렌더링된 화면(iframe designMode)에서 직접 한다.
-  // (인라인 이미지 등이 bodyHtml 안에 base64로 포함되어 있어 bodyText로 대체 저장하면 사라진다.)
   const bodyIsHtml = Boolean(post.bodyHtml)
 
   const startBodyEdit = () => {
@@ -267,9 +261,6 @@ export default function StandardsDetailRoute() {
 
   const saveBodyEdit = () => {
     if (bodyIsHtml) {
-      // designMode로 편집된 iframe 문서의 현재 DOM 상태를 그대로 읽어 저장한다.
-      // (원본 문자열과 브라우저가 재직렬화한 HTML은 속성 순서 등이 달라질 수 있어 단순 문자열 비교로
-      // 변경 여부를 판단하지 않는다.)
       const editedHtml = editableBodyRef.current?.contentDocument?.documentElement.outerHTML
       if (editedHtml === undefined) {
         cancelBodyEdit()
@@ -320,7 +311,7 @@ export default function StandardsDetailRoute() {
           ) : (
             <div className="flex items-center gap-1">
               <h1 className="truncate text-xl font-semibold tracking-tight">{post.title}</h1>
-              {canManage ? (
+              {canWrite ? (
                 <Button type="button" variant="ghost" size="icon" aria-label="제목 수정" onClick={() => setIsEditingTitle(true)}>
                   <Pencil className="size-4" aria-hidden />
                 </Button>
@@ -333,13 +324,13 @@ export default function StandardsDetailRoute() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {canManage ? (
+          {canWrite ? (
             <Button variant="danger" onClick={() => setConfirmingDelete(true)}>
               <Trash2 aria-hidden />
               삭제
             </Button>
           ) : null}
-          <Link to="/standards">
+          <Link to="/site-mails">
             <Button>
               <List aria-hidden />
               목록
@@ -364,29 +355,15 @@ export default function StandardsDetailRoute() {
         <CardHeader className="flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-1">
             <CardTitle>본문</CardTitle>
-            {canManage && !isEditingBody ? (
+            {canWrite && !isEditingBody ? (
               <Button type="button" variant="ghost" size="icon" aria-label="본문 수정" onClick={startBodyEdit}>
                 <Pencil className="size-4" aria-hidden />
               </Button>
             ) : null}
           </div>
-          {canManage ? (
+          {canWrite ? (
             isEditingClassification ? (
               <div className="flex flex-wrap items-center gap-2">
-                <Select
-                  value={departmentDraft}
-                  disabled={metaFetcher.state !== "idle"}
-                  onChange={(e) => setDepartmentDraft(e.target.value)}
-                  className="h-8 text-xs"
-                  aria-label="부서"
-                >
-                  <option value="">부서 없음</option>
-                  {departmentOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </Select>
                 <Select
                   value={categoryDraft}
                   disabled={metaFetcher.state !== "idle"}
@@ -417,7 +394,6 @@ export default function StandardsDetailRoute() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">{currentDepartment?.name ?? "부서 없음"}</span>
                 {currentCategory ? (
                   <CategoryBadge name={currentCategory.name} color={currentCategory.color} />
                 ) : (
@@ -563,12 +539,12 @@ export default function StandardsDetailRoute() {
                             </Button>
                           </a>
                         ) : null}
-                        <a href={`/standards/attachments/${att.id}/download`} download={att.filename}>
+                        <a href={`/site-mails/attachments/${att.id}/download`} download={att.filename}>
                           <Button type="button" variant="ghost" size="icon" aria-label="다운로드">
                             <Download className="size-4" aria-hidden />
                           </Button>
                         </a>
-                        {canManage ? (
+                        {canWrite ? (
                           <Button
                             type="button"
                             variant="ghost"
@@ -579,7 +555,7 @@ export default function StandardsDetailRoute() {
                             <Pencil className="size-4" aria-hidden />
                           </Button>
                         ) : null}
-                        {canManage ? (
+                        {canWrite ? (
                           <Button
                             type="button"
                             variant="ghost"
@@ -599,7 +575,7 @@ export default function StandardsDetailRoute() {
             </ul>
           )}
 
-          {canManage ? (
+          {canWrite ? (
             <div>
               <input
                 ref={fileInputRef}

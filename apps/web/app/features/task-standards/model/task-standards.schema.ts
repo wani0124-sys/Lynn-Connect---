@@ -46,6 +46,20 @@ export function validateTitle(title: string): string | null {
   return null
 }
 
+const MAX_BODY_TEXT_LENGTH = 50_000
+// 본문 HTML에는 인라인 이미지가 base64로 포함될 수 있어 원본 .eml 크기(MAX_EML_SIZE_BYTES)에 맞춰 여유 있게 설정한다.
+const MAX_BODY_HTML_LENGTH = MAX_EML_SIZE_BYTES
+
+export function validateBodyText(bodyText: string): string | null {
+  if (bodyText.length > MAX_BODY_TEXT_LENGTH) return `본문은 ${MAX_BODY_TEXT_LENGTH.toLocaleString()}자를 넘을 수 없습니다.`
+  return null
+}
+
+export function validateBodyHtml(bodyHtml: string): string | null {
+  if (bodyHtml.length > MAX_BODY_HTML_LENGTH) return "본문 HTML 용량이 너무 큽니다."
+  return null
+}
+
 export function validateAttachmentFilename(filename: string): string | null {
   if (!filename.trim()) return "파일 이름을 입력하세요."
   if (filename.length > 255) return "파일 이름은 255자를 넘을 수 없습니다."

@@ -13,12 +13,6 @@ import { Input } from "~/shared/ui/input"
 import { Select } from "~/shared/ui/select"
 import { DragHandle, SortableList } from "~/shared/ui/sortable-list"
 
-// 아직 실제 화면이 없는 커스텀 하위 메뉴(관리자가 메뉴 관리에서 즉석으로 만든 항목)는 "/menu/<slug>" 라우트를 쓴다.
-// 이 항목만 화면에서 직접 삭제할 수 있다(고정 6개 화면 리프는 코드/마이그레이션으로만 관리).
-function isCustomLeafRoute(route: string | null): boolean {
-  return route !== null && route.startsWith("/menu/")
-}
-
 export interface SidebarMenuManagerProps {
   tree: Record<SidebarMenuPlacement, SidebarMenuNode[]>
   pending: boolean
@@ -262,18 +256,16 @@ function MenuRow({
                           </option>
                         ))}
                       </Select>
-                      {isCustomLeafRoute(child.route) ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label="하위 메뉴 삭제"
-                          disabled={pending}
-                          onClick={() => onDeleteLeaf(child.id)}
-                        >
-                          <Trash2 className="size-4 text-danger" aria-hidden />
-                        </Button>
-                      ) : null}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="하위 메뉴 삭제"
+                        disabled={pending}
+                        onClick={() => onDeleteLeaf(child.id)}
+                      >
+                        <Trash2 className="size-4 text-danger" aria-hidden />
+                      </Button>
                     </div>
                   )
                 }}
