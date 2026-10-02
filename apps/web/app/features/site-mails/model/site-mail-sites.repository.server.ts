@@ -111,3 +111,31 @@ export async function setSiteMailSiteWriters(siteId: number, memberIds: string[]
   const { error } = await supabase.from(TABLE_WRITERS).insert(unique.map((memberId) => ({ site_id: siteId, member_id: memberId })))
   if (error) throw new Error(`담당자를 저장하지 못했습니다: ${error.message}`)
 }
+
+// 멤버 관리 화면용: 계정별로 담당 중인 메일함 현장 id 목록.
+export async function listSiteMailSiteIdsByMember(): Promise<Record<string, number[]>> {
+  const { data, error } = await getSupabaseServerClient().from(TABLE_WRITERS).select("site_id, member_id")
+  if (error) throw new Error(`현장 담당자를 불러오지 못했습니다: ${error.message}`)
+  const result: Record<string, number[]> = {}
+  for (const row of (data as { site_id: number; member_id: string }[]) ?? []) {
+    ;(result[row.member_id] ??= []).push(row.site_id)
+  }
+  return result
+}
+
+// 멤버 계정 폼에서 고른 메일함 현장으로 담당 지정을 맞춘다. 한 현장에는 담당자가 여러 명일 수 있으므로
+// 다른 계정의 담당 지정은 건드리지 않는다. 이미 그 현장 담당이면(현장 관리 팝업에서 여러 현장을 지정해 둔 경우 포함)
+// 그대로 두고, 다른 현장을 고르면 이 계정의 담당 현장을 그 현장 하나로 바꾸며, null이면 모두 해제한다.
+export async function setMemberSiteMailSite(memberId: string, siteId: number | null): Promise<void> {
+  const supabase = getSupabaseServerClient()
+  const { data, error } = await supabase.from(TABLE_WRITERS).select("site_id").eq("member_id", memberId)
+  if (error) throw new Error(`현장 담당자를 불러오지 못했습니다: ${error.message}`)
+  const current = ((data as { site_id: number }[]) ?? []).map((row) => row.site_id)
+  if (siteId !== null && current.includes(siteId)) return
+
+  const { error: deleteError } = await supabase.from(TABLE_WRITERS).delete().eq("member_id", memberId)
+  if (deleteError) throw new Error(`담당자를 저장하지 못했습니다: ${deleteError.message}`)
+  if (siteId === null) return
+  const { error: insertError } = await supabase.from(TABLE_WRITERS).insert({ site_id: siteId, member_id: memberId })
+  if (insertError) throw new Error(`담당자를 저장하지 못했습니다: ${insertError.message}`)
+}

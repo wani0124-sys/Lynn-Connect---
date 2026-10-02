@@ -18,6 +18,12 @@ import { generateTempPassword, hashPassword } from "~/features/auth/model/creden
 import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
 import { listSites } from "~/features/sites/model/sites.repository.server"
 import {
+  listSiteMailSiteIdsByMember,
+  listSiteMailSites,
+  setMemberSiteMailSite,
+} from "~/features/site-mails/model/site-mail-sites.repository.server"
+import type { SiteMailSite } from "~/entities/site-mail/model/site-mail.types"
+import {
   createMember,
   deleteMember,
   getMemberByEmail,
@@ -53,13 +59,28 @@ export async function loader({ request }: LoaderFunctionArgs) {
   } catch (error) {
     console.error("현장 목록을 불러오지 못했습니다:", error)
   }
+  // 현장별 메일함 현장은 대외기관 점검 현장(sites)과 별개 목록이라 따로 불러와, 소속 현장 선택에 함께 보여준다.
+  let mailSites: SiteMailSite[] = []
+  let mailSiteIdsByMember: Record<string, number[]> = {}
+  try {
+    ;[mailSites, mailSiteIdsByMember] = await Promise.all([listSiteMailSites(), listSiteMailSiteIdsByMember()])
+  } catch (error) {
+    console.error("메일함 현장 목록을 불러오지 못했습니다:", error)
+  }
   let members: Member[] = []
   try {
     members = await listMembers()
   } catch (error) {
     console.error("멤버 목록을 불러오지 못했습니다:", error)
   }
-  return { members, currentUserId: user.id, sites, canManage: isHeadquarters(user.role) }
+  return { members, currentUserId: user.id, sites, mailSites, mailSiteIdsByMember, canManage: isHeadquarters(user.role) }
+}
+
+// siteId: 대외기관 점검 현장(sites), mailSiteId: 현장별 메일함 현장(site_mail_sites). 두 목록은 서로 독립적이다.
+function readSiteIds(form: FormData): { siteId: number | null; mailSiteId: number | null } {
+  const siteIdRaw = form.get("siteId")
+  const mailSiteIdRaw = form.get("mailSiteId")
+  return { siteId: siteIdRaw ? Number(siteIdRaw) : null, mailSiteId: mailSiteIdRaw ? Number(mailSiteIdRaw) : null }
 }
 
 function computeManagedSiteIds(existing: Member, role: CreatableMemberRole, siteId: number | null): number[] | null {
@@ -83,15 +104,14 @@ export async function action({ request }: ActionFunctionArgs) {
         const position = String(form.get("position") ?? "").trim() || null
         const department = String(form.get("department") ?? "").trim() || null
         const menuPermission = String(form.get("menuPermission") ?? "limited") as MenuPermission
-        const siteIdRaw = form.get("siteId")
-        const siteId = siteIdRaw ? Number(siteIdRaw) : null
+        const { siteId, mailSiteId } = readSiteIds(form)
 
         if (!name || !email) return data({ error: "이름과 이메일을 입력하세요." }, { status: 400 })
-        if (role === "member" && siteId === null) return data({ error: "소속 현장을 선택하세요." }, { status: 400 })
+        if (role === "member" && siteId === null && mailSiteId === null) return data({ error: "소속 현장을 선택하세요." }, { status: 400 })
         if (await getMemberByEmail(email)) return data({ error: "이미 등록된 이메일입니다." }, { status: 400 })
 
         const tempPassword = generateTempPassword()
-        await createMember({
+        const createdMember = await createMember({
           name,
           email,
           role,
@@ -105,16 +125,16 @@ export async function action({ request }: ActionFunctionArgs) {
           joinedAt: new Date().toISOString().slice(0, 10),
           mustChangePassword: true,
         })
+        if (role === "member" && mailSiteId !== null) await setMemberSiteMailSite(createdMember.id, mailSiteId)
 
         return { ok: true as const, created: [{ name, email, tempPassword }] }
       }
       case "member.bulkCreate": {
         const role = String(form.get("role") ?? "member") as CreatableMemberRole
-        const siteIdRaw = form.get("siteId")
-        const siteId = siteIdRaw ? Number(siteIdRaw) : null
+        const { siteId, mailSiteId } = readSiteIds(form)
         const rows = JSON.parse(String(form.get("rows") ?? "[]")) as { name: string; email: string }[]
 
-        if (role === "member" && siteId === null) return data({ error: "소속 현장을 선택하세요." }, { status: 400 })
+        if (role === "member" && siteId === null && mailSiteId === null) return data({ error: "소속 현장을 선택하세요." }, { status: 400 })
 
         const created: CreatedAccount[] = []
         const seenEmails = new Set<string>()
@@ -127,7 +147,7 @@ export async function action({ request }: ActionFunctionArgs) {
           seenEmails.add(normalized)
 
           const tempPassword = generateTempPassword()
-          await createMember({
+          const createdMember = await createMember({
             name,
             email,
             role,
@@ -141,6 +161,7 @@ export async function action({ request }: ActionFunctionArgs) {
             joinedAt: new Date().toISOString().slice(0, 10),
             mustChangePassword: true,
           })
+          if (role === "member" && mailSiteId !== null) await setMemberSiteMailSite(createdMember.id, mailSiteId)
           created.push({ name, email, tempPassword })
         }
 
@@ -159,11 +180,10 @@ export async function action({ request }: ActionFunctionArgs) {
         const position = String(form.get("position") ?? "").trim() || null
         const department = String(form.get("department") ?? "").trim() || null
         const menuPermission = String(form.get("menuPermission") ?? "limited") as MenuPermission
-        const siteIdRaw = form.get("siteId")
-        const siteId = siteIdRaw ? Number(siteIdRaw) : null
+        const { siteId, mailSiteId } = readSiteIds(form)
 
         if (!name) return data({ error: "이름을 입력하세요." }, { status: 400 })
-        if (role === "member" && siteId === null) return data({ error: "소속 현장을 선택하세요." }, { status: 400 })
+        if (role === "member" && siteId === null && mailSiteId === null) return data({ error: "소속 현장을 선택하세요." }, { status: 400 })
 
         await updateMember(id, {
           name,
@@ -174,6 +194,8 @@ export async function action({ request }: ActionFunctionArgs) {
           siteId: role === "member" ? siteId : null,
           managedSiteIds: computeManagedSiteIds(existing, role, siteId),
         })
+        // 본사관리자는 담당 지정 없이도 모든 메일함 현장에 쓸 수 있으므로 담당 지정을 비운다.
+        await setMemberSiteMailSite(id, role === "member" ? mailSiteId : null)
         return { ok: true as const }
       }
       case "member.delete": {
@@ -207,7 +229,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function MembersRoute() {
-  const { members, currentUserId, sites, canManage } = useLoaderData<typeof loader>()
+  const { members, currentUserId, sites, mailSites, mailSiteIdsByMember, canManage } = useLoaderData<typeof loader>()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get("tab") === "site-permissions" ? "site-permissions" : "members"
 
@@ -322,16 +344,32 @@ export default function MembersRoute() {
         department: values.department,
         menuPermission: values.menuPermission,
         siteId: values.siteId !== null ? String(values.siteId) : "",
+        mailSiteId: values.mailSiteId !== null ? String(values.mailSiteId) : "",
       },
       { method: "post" },
     )
   }
 
-  function handleBulkSubmit(rows: BulkCreateRow[], role: CreatableMemberRole, siteId: number | null) {
+  function handleBulkSubmit(rows: BulkCreateRow[], role: CreatableMemberRole, siteId: number | null, mailSiteId: number | null) {
     bulkFetcher.submit(
-      { intent: "member.bulkCreate", role, siteId: siteId !== null ? String(siteId) : "", rows: JSON.stringify(rows) },
+      {
+        intent: "member.bulkCreate",
+        role,
+        siteId: siteId !== null ? String(siteId) : "",
+        mailSiteId: mailSiteId !== null ? String(mailSiteId) : "",
+        rows: JSON.stringify(rows),
+      },
       { method: "post" },
     )
+  }
+
+  // 관리 현장 열: 대외기관 점검 관리 현장 + 담당 중인 메일함 현장.
+  function formatMemberSites(member: Member): string {
+    const inspection = formatManagedSites(member.managedSiteIds, sites)
+    const mailNames = (mailSiteIdsByMember[member.id] ?? [])
+      .map((id) => mailSites.find((site) => site.id === id)?.name)
+      .filter((name): name is string => Boolean(name))
+    return mailNames.length ? `${inspection} · 메일함: ${mailNames.join(", ")}` : inspection
   }
 
   function handleDelete() {
@@ -502,7 +540,7 @@ export default function MembersRoute() {
                         <p className="text-sm">{member.position ?? "-"}</p>
                         <p className="text-xs text-muted-foreground">{member.department ?? "-"}</p>
                       </TD>
-                      <TD className="text-sm text-muted-foreground">{formatManagedSites(member.managedSiteIds, sites)}</TD>
+                      <TD className="text-sm text-muted-foreground">{formatMemberSites(member)}</TD>
                       {canManage ? (
                         <TD className="text-right">
                           <Button variant="ghost" size="icon" aria-label="수정" onClick={() => openEdit(member)}>
@@ -570,6 +608,8 @@ export default function MembersRoute() {
             setEditingMember(null)
           }}
           sites={sites}
+          mailSites={mailSites}
+          editingMemberMailSiteIds={editingMember ? (mailSiteIdsByMember[editingMember.id] ?? []) : []}
           editingMember={editingMember}
           pending={formFetcher.state !== "idle"}
           error={formError}
@@ -582,6 +622,7 @@ export default function MembersRoute() {
           open={bulkModalOpen}
           onClose={() => setBulkModalOpen(false)}
           sites={sites}
+          mailSites={mailSites}
           pending={bulkFetcher.state !== "idle"}
           error={bulkError}
           onSubmit={handleBulkSubmit}

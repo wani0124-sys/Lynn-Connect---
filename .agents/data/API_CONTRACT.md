@@ -81,18 +81,19 @@ Route: GET /members (routes/members.tsx loader)
 Purpose: 계정(멤버) 목록 + 관리 현장 권한 탭 데이터 조회
 Auth required: 로그인 (requireUser)
 Allowed roles: admin/manager/member 전체 조회 가능. canManage(admin/manager)만 생성/수정/삭제 UI 노출
-Response: { members: Member[], currentUserId: string, sites: Site[], canManage: boolean }
-Related repository: members.repository.server.ts#listMembers
+Response: { members: Member[], currentUserId: string, sites: Site[], mailSites: SiteMailSite[], mailSiteIdsByMember: Record<memberId, number[]>, canManage: boolean }
+Related repository: members.repository.server.ts#listMembers, site-mail-sites.repository.server.ts#listSiteMailSites/listSiteMailSiteIdsByMember
 
 Route: POST /members (routes/members.tsx action, intent=member.create|member.bulkCreate|member.update|member.delete|member.bulkDelete|member.updateSitePermission)
 Purpose: 계정 생성/일괄 생성/수정/삭제, 관리 현장 권한 수정
 Auth required: 로그인 + 본사 권한 (requireHeadquarters)
 Allowed roles: admin, manager
-Request body: intent별로 name/email/role/position/department/menuPermission/siteId, 또는 id/ids, 또는 managedSiteIds(JSON)
+Request body: intent별로 name/email/role/position/department/menuPermission/siteId/mailSiteId, 또는 id/ids, 또는 managedSiteIds(JSON). siteId는 대외기관 점검 현장(sites), mailSiteId는 현장별 메일함 현장(site_mail_sites)이며 현장관리자는 둘 중 하나 이상 필수(2026-10-02)
 Response: 성공 시 { ok: true }(create/bulkCreate는 { ok: true, created: CreatedAccount[] } 포함). 실패 시 { error: string }(400)
 Error codes: "이미 등록된 이메일입니다.", "소속 현장을 선택하세요.", "본인 계정은 삭제할 수 없습니다." 등
-Related repository: members.repository.server.ts#createMember/updateMember/deleteMember/getMemberByEmail/getMemberById
-Notes: 계정 생성 시 이메일을 아이디로, credentials.server.ts#DEFAULT_TEMP_PASSWORD("Woomilynn")를 초기 비밀번호로 고정 발급하고 hashPassword로 해시해 password_hash 컬럼에 직접 insert한다. mustChangePassword=true로 최초 로그인 시 /change-password로 강제 이동.
+Related repository: members.repository.server.ts#createMember/updateMember/deleteMember/getMemberByEmail/getMemberById, site-mail-sites.repository.server.ts#setMemberSiteMailSite
+Notes: mailSiteId는 site_mail_site_writers(메일함 현장 담당자)로 저장한다. 한 현장에 담당자 여러 명 가능하며 다른 계정의 담당 지정은 건드리지 않는다. 이미 그 현장 담당이면 그대로 두고, 다른 현장을 고르면 그 계정의 담당 현장을 그 하나로 바꾸며, 본사관리자로 바꾸면 담당 지정을 비운다.
+ 계정 생성 시 이메일을 아이디로, credentials.server.ts#DEFAULT_TEMP_PASSWORD("Woomilynn")를 초기 비밀번호로 고정 발급하고 hashPassword로 해시해 password_hash 컬럼에 직접 insert한다. mustChangePassword=true로 최초 로그인 시 /change-password로 강제 이동.
 
 Route: GET/POST /login (routes/login.tsx loader/action)
 Purpose: 이메일/비밀번호 로그인
