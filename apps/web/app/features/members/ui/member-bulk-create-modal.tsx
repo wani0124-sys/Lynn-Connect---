@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { CREATABLE_MEMBER_ROLE_OPTIONS, type CreatableMemberRole } from "~/entities/member/model/member"
 import type { Site } from "~/entities/site/model/site.types"
+import type { SiteMailSite } from "~/entities/site-mail/model/site-mail.types"
 import { Button } from "~/shared/ui/button"
 import { Field } from "~/shared/ui/field"
 import { Modal } from "~/shared/ui/modal"
@@ -16,9 +17,10 @@ export interface MemberBulkCreateModalProps {
   open: boolean
   onClose: () => void
   sites: Site[]
+  mailSites: SiteMailSite[]
   pending?: boolean
   error?: string | null
-  onSubmit: (rows: BulkCreateRow[], role: CreatableMemberRole, siteId: number | null) => void
+  onSubmit: (rows: BulkCreateRow[], role: CreatableMemberRole, siteId: number | null, mailSiteId: number | null) => void
 }
 
 function parseRows(raw: string): BulkCreateRow[] {
@@ -33,24 +35,26 @@ function parseRows(raw: string): BulkCreateRow[] {
     .filter((row) => row.name !== "" && row.email !== "")
 }
 
-export function MemberBulkCreateModal({ open, onClose, sites, pending, error, onSubmit }: MemberBulkCreateModalProps) {
+export function MemberBulkCreateModal({ open, onClose, sites, mailSites, pending, error, onSubmit }: MemberBulkCreateModalProps) {
   const [role, setRole] = useState<CreatableMemberRole>("member")
   const [siteId, setSiteId] = useState<number | null>(null)
+  const [mailSiteId, setMailSiteId] = useState<number | null>(null)
   const [raw, setRaw] = useState("")
 
   useEffect(() => {
     if (!open) return
     setRole("member")
     setSiteId(null)
+    setMailSiteId(null)
     setRaw("")
   }, [open])
 
   const rows = parseRows(raw)
-  const canSubmit = rows.length > 0 && (role === "manager" || siteId !== null)
+  const canSubmit = rows.length > 0 && (role === "manager" || siteId !== null || mailSiteId !== null)
 
   function submit() {
     if (!canSubmit) return
-    onSubmit(rows, role, role === "manager" ? null : siteId)
+    onSubmit(rows, role, role === "manager" ? null : siteId, role === "manager" ? null : mailSiteId)
   }
 
   return (
@@ -99,14 +103,31 @@ export function MemberBulkCreateModal({ open, onClose, sites, pending, error, on
           </Field>
 
           {role === "member" ? (
-            <Field label="소속 현장" htmlFor="bulk-site" required>
+            <Field label="소속 현장 · 현장별 메일함" htmlFor="bulk-mail-site" required hint="두 메뉴 중 하나 이상 선택">
+              <Select
+                id="bulk-mail-site"
+                value={mailSiteId ?? ""}
+                onChange={(e) => setMailSiteId(e.target.value ? Number(e.target.value) : null)}
+                className="w-full"
+              >
+                <option value="">선택 안 함</option>
+                {mailSites.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
+          {role === "member" ? (
+            <Field label="소속 현장 · 대외기관 점검" htmlFor="bulk-site">
               <Select
                 id="bulk-site"
                 value={siteId ?? ""}
                 onChange={(e) => setSiteId(e.target.value ? Number(e.target.value) : null)}
                 className="w-full"
               >
-                <option value="">현장을 선택하세요</option>
+                <option value="">선택 안 함</option>
                 {sites.map((site) => (
                   <option key={site.id} value={site.id}>
                     {site.name}
