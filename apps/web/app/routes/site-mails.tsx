@@ -7,7 +7,7 @@ import { CategoryBadge } from "~/entities/task-standard/ui/category-badge"
 import type { SiteMailPostSort } from "~/entities/site-mail/model/site-mail.types"
 import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
 import { listMembers } from "~/features/members/model/members.repository.server"
-import { canWriteSiteMail, requireSiteMailWriteAccess } from "~/features/site-mails/model/site-mail-access.server"
+import { canViewSiteMail, canWriteSiteMail, requireSiteMailWriteAccess } from "~/features/site-mails/model/site-mail-access.server"
 import {
   assertSiteMailCategory,
   createSiteMailCategory,
@@ -63,7 +63,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const page = Number(url.searchParams.get("page") ?? "1") || 1
 
   const canManageSites = isHeadquarters(user.role)
-  const [sorted, members] = await Promise.all([listSiteMailSites(), canManageSites ? listMembers() : Promise.resolve([])])
+  const [allSites, members] = await Promise.all([listSiteMailSites(), canManageSites ? listMembers() : Promise.resolve([])])
+  // 현장 계정은 담당 현장만 탭으로 보인다(다른 현장 id를 ?site=로 넣어도 아래에서 첫 담당 현장으로 대체된다).
+  const sorted = allSites.filter((site) => canViewSiteMail(user, site))
   const siteIdParam = url.searchParams.get("site")
   const parsedSiteId = siteIdParam ? Number(siteIdParam) : sorted[0]?.id
   const selectedSiteId = Number.isFinite(parsedSiteId) ? (parsedSiteId as number) : null
@@ -280,8 +282,12 @@ export default function SiteMailsRoute() {
       {sites.length === 0 ? (
         <Card className="p-5">
           <EmptyState
-            title="등록된 현장이 없습니다"
-            description={canManageSites ? "우측 상단의 현장 관리에서 현장을 먼저 추가하세요." : "본사 관리자에게 현장 추가를 요청하세요."}
+            title={canManageSites ? "등록된 현장이 없습니다" : "담당 현장이 없습니다"}
+            description={
+              canManageSites
+                ? "우측 상단의 현장 관리에서 현장을 먼저 추가하세요."
+                : "본사 관리자에게 멤버 관리에서 소속 현장(현장별 메일함) 지정을 요청하세요."
+            }
           />
         </Card>
       ) : (

@@ -11,7 +11,7 @@ import {
 import { Check, Download, ExternalLink, List, Paperclip, Pencil, Trash2, Upload, X } from "lucide-react"
 import { CategoryBadge } from "~/entities/task-standard/ui/category-badge"
 import { requireUser } from "~/features/auth/model/session.server"
-import { canWriteSiteMail, requireSiteMailWriteAccess } from "~/features/site-mails/model/site-mail-access.server"
+import { canViewSiteMail, canWriteSiteMail, requireSiteMailWriteAccess } from "~/features/site-mails/model/site-mail-access.server"
 import { getSiteMailSiteById } from "~/features/site-mails/model/site-mail-sites.repository.server"
 import {
   addSiteMailAttachment,
@@ -42,6 +42,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const user = await requireUser(request)
   const postId = params.postId ?? ""
   const post = await getSiteMailPostById(postId)
+  const site = post ? await getSiteMailSiteById(post.siteId) : null
+  // 현장 계정은 담당 현장의 메일만 열람할 수 있다.
+  if (site && !canViewSiteMail(user, site)) throw redirect("/forbidden")
   // 구분자는 현장마다 따로이므로 이 메일이 속한 현장의 목록만 보여준다.
   const categories = post ? await listSiteMailCategories(post.siteId) : []
 
@@ -53,7 +56,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     attachmentUrls = Object.fromEntries(entries.filter((entry): entry is [string, string] => entry[1] !== null))
   }
 
-  const site = post ? await getSiteMailSiteById(post.siteId) : null
   return { post, categories, attachmentUrls, canWrite: site ? canWriteSiteMail(user, site) : false }
 }
 

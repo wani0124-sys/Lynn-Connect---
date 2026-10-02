@@ -132,7 +132,7 @@ Related repository: sidebar-menu.repository.server.ts#findMenuItemByRoute
 Route: GET /site-mails (routes/site-mails.tsx loader)
 Purpose: 현장별 중요메일 목록 조회(현장 탭 + 구분자 탭 + 검색/정렬/페이지네이션)
 Auth required: 로그인 (requireUser)
-Allowed roles: admin/manager/member 전체 조회 가능(다른 현장 자료도 열람 가능). canWrite(canWriteSite: 본사는 전체, 현장은 자기 현장만)만 EML 업로드/일괄 수정·삭제 UI 노출. canWrite인 계정이 선택 현장의 구분자 관리 UI 사용(2026-10-02 현장별 구분자)
+Allowed roles: 본사(admin/manager)는 모든 현장, 현장(member) 계정은 담당 메일함 현장(site_mail_site_writers)만 탭으로 보이고 조회 가능(canViewSiteMail, 2026-10-02 사용자 요청 "현장은 본인 현장만"). canWrite(canWriteSiteMail: 본사는 전체, 현장은 담당 현장만)만 EML 업로드/일괄 수정·삭제 UI 노출. canWrite인 계정이 선택 현장의 구분자 관리 UI 사용(2026-10-02 현장별 구분자)
 Request params: ?site=<id>&cat=<id|null>&q=&sort=sent_desc|sent_asc|created_desc|created_asc&page=
 Response: { sites: Site[], selectedSite: Site | null, categories: StandardCategory[](선택 현장 것만), postList: SiteMailPostListResult, canManageSites: boolean, writerCandidates, canWrite: boolean }
 Related repository: site-mails.repository.server.ts#listSiteMailPosts, site-mail-sites.repository.server.ts#listSiteMailSites, site-mail-categories.repository.server.ts#listSiteMailCategories
@@ -155,20 +155,20 @@ Related repository: task-standards.parser.server.ts#parseStandardEml(재사용),
 
 Route: GET /site-mails/:postId (routes/site-mails-detail.tsx loader)
 Purpose: 현장 메일 상세 조회 + 첨부파일 signed URL(5분 유효) 발급
-Auth required: 로그인 (requireUser)
+Auth required: 로그인 + 이 메일이 속한 현장의 열람 권한(canViewSiteMail — 본사 또는 담당자). 없으면 /forbidden
 Response: { post: SiteMailPost | null, categories: StandardCategory[], attachmentUrls: Record<string,string>, canWrite: boolean }
 Related repository: site-mails.repository.server.ts#getSiteMailPostById, #getSiteMailAttachmentDownloadUrl
 
 Route: POST /site-mails/:postId (routes/site-mails-detail.tsx action, intent=meta.update|attachment.add|attachment.rename|attachment.delete|post.delete)
 Purpose: 제목/구분자/본문 수정, 첨부파일 추가/이름수정/삭제, 게시글 삭제
-Auth required: 로그인 + 이 게시글이 속한 현장의 쓰기 권한. params.postId로 게시글을 먼저 조회해 실제 site_id를 기준으로 requireSiteWriteAccess를 한 번만 검사한다(요청 본문의 값을 신뢰하지 않음) — 모든 intent가 같은 postId에 대해 동작하므로 action 진입 시 단 한 번만 검사
+Auth required: 로그인 + 이 게시글이 속한 현장의 쓰기 권한. params.postId로 게시글을 먼저 조회해 실제 site_id를 기준으로 requireSiteMailWriteAccess를 한 번만 검사한다(요청 본문의 값을 신뢰하지 않음) — 모든 intent가 같은 postId에 대해 동작하므로 action 진입 시 단 한 번만 검사
 Response: 성공 시 { ok: true }(post.delete는 redirect(/site-mails)). 실패 시 { error: string }(400)
 Related repository: site-mails.repository.server.ts#updateSiteMailPostMeta/addSiteMailAttachment/renameSiteMailAttachment/deleteSiteMailAttachment/deleteSiteMailPost
 
 Route: GET /site-mails/attachments/:attachmentId/download (routes/site-mails-attachment-download.tsx loader)
 Purpose: 첨부파일 원본 다운로드(브라우저 저장 강제, Content-Disposition: attachment)
-Auth required: 로그인 (requireUser)
-Related repository: site-mails.repository.server.ts#getSiteMailAttachmentFile
+Auth required: 로그인 + 첨부가 속한 메일의 현장 열람 권한(requireSiteMailReadAccess). 없으면 /forbidden
+Related repository: site-mails.repository.server.ts#getSiteMailAttachmentSiteId/getSiteMailAttachmentFile
 
 Route: GET / (모든 화면 공통, routes/_app.tsx loader)
 Purpose: 로그인 사용자 확인 + 사이드바 렌더용 메뉴 트리 조회(DB 우선, 실패 시 nav.ts 정적 배열로 폴백)

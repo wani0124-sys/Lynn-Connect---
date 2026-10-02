@@ -12,7 +12,7 @@
 
 - 이유: 앱이 `@react-router/node` + `react-router-serve` 기반 Node 서버이고, `mailparser`(EML)·`pdf-parse`·`node:crypto`(scrypt) 등 Node 전용 라이브러리를 써서 Workers 런타임으로 옮기려면 코드 수정이 크다.
 - 설정 파일: 루트 `render.yaml`(Blueprint). 서비스 `lynn-connect`, region `singapore`, `plan: free`(상시 운영이 필요하면 대시보드에서 starter 이상으로 변경 — 비용 발생은 사용자 승인 사항).
-- Build: `corepack enable && pnpm install --frozen-lockfile && pnpm build` / Start: `pnpm start`(`react-router-serve`, `NODE_ENV=production` 기본, Render의 `PORT`로 listen). Health check: `/login`.
+- Build: `corepack pnpm install --frozen-lockfile && corepack pnpm build` / Start: `corepack pnpm start`(Render 빌드 환경은 `/usr/bin`이 읽기 전용이라 `corepack enable`이 EROFS로 실패한다 — 2026-10-02 첫 배포 실패 원인)(`react-router-serve`, `NODE_ENV=production` 기본, Render의 `PORT`로 listen). Health check: `/login`.
 - 배포 트리거: `main` 브랜치 push(=PR merge) 시 자동 배포(`autoDeploy: true`). 따라서 **main merge가 곧 production 배포**이며 사용자 승인 없이 merge하지 않는다.
 - 환경변수(Render 대시보드에서만 입력, 저장소 커밋 금지): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `SESSION_SECRET`(Blueprint가 자동 생성). `SESSION_SECRET`이 없으면 운영 모드에서 서버가 기동을 거부한다(`session.server.ts`).
 - DB: Render 앱과 로컬 개발이 같은 production Supabase를 쓴다. migration은 배포 전에 `.agents/data/MIGRATION.md` 절차대로 사용자 승인 후 적용한다.

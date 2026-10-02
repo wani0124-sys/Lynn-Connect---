@@ -371,6 +371,17 @@ export async function getSiteMailAttachmentDownloadUrl(id: string): Promise<{ ur
   return { url: data.signedUrl, filename: row.filename }
 }
 
+// 첨부 -> 메일 -> 현장 id. 첨부 다운로드 권한 확인용.
+export async function getSiteMailAttachmentSiteId(id: string): Promise<number | null> {
+  const supabase = getSupabaseServerClient()
+  const { data: att, error } = await supabase.from(TABLE_ATTACHMENTS).select("post_id").eq("id", id).maybeSingle()
+  if (error) throw new Error(`첨부파일 정보를 불러오지 못했습니다: ${error.message}`)
+  if (!att) return null
+  const { data: post, error: postError } = await supabase.from(TABLE_POSTS).select("site_id").eq("id", att.post_id).maybeSingle()
+  if (postError) throw new Error(`게시글 정보를 불러오지 못했습니다: ${postError.message}`)
+  return post ? (post.site_id as number) : null
+}
+
 export async function getSiteMailAttachmentFile(
   id: string,
 ): Promise<{ blob: Blob; mimeType: string | null; filename: string } | null> {
