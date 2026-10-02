@@ -12,13 +12,18 @@ services:
     region: singapore
     branch: main
     autoDeploy: true
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    # Render 빌드 환경은 /usr/bin이 읽기 전용이라 `corepack enable`(전역 shim 설치)이 EROFS로 실패한다(2026-10-02 첫 배포 실패).
+    # 대신 `corepack pnpm`으로 package.json의 packageManager(pnpm@10.33.4)를 설치 없이 바로 실행한다.
+    buildCommand: corepack pnpm install --frozen-lockfile && corepack pnpm build
     # react-router-serve가 NODE_ENV=production을 기본값으로 쓰고 Render가 주는 PORT로 listen한다.
-    startCommand: pnpm start
+    startCommand: corepack pnpm start
     healthCheckPath: /login
     envVars:
       - key: NODE_VERSION
         value: "24"
+      # corepack이 pnpm을 내려받을 때 확인 질문 없이 진행하게 한다(비대화형 빌드).
+      - key: COREPACK_ENABLE_DOWNLOAD_PROMPT
+        value: "0"
       # 아래 값들은 저장소에 절대 커밋하지 않는다. Blueprint 생성 시 대시보드에서 직접 입력한다(sync: false).
       - key: SUPABASE_URL
         sync: false
