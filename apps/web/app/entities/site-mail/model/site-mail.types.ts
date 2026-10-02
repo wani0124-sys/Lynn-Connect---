@@ -1,3 +1,12 @@
+// 현장 메일함 전용 현장(site_mail_sites). 대외기관 점검의 sites와는 별개 목록이다.
+// writerMemberIds: 이 현장 메일을 업로드·수정·삭제할 수 있는 현장 계정(본사 계정은 지정 없이도 항상 가능).
+export type SiteMailSite = {
+  id: number
+  name: string
+  sortOrder: number
+  writerMemberIds: string[]
+}
+
 export type SiteMailAttachment = {
   id: string
   filename: string

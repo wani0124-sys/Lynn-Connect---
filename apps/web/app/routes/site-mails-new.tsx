@@ -9,11 +9,12 @@ import {
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from "react-router"
-import { requireSiteWriteAccess, requireUser } from "~/features/auth/model/session.server"
-import { getSiteById, listSites } from "~/features/sites/model/sites.repository.server"
+import { requireUser } from "~/features/auth/model/session.server"
+import { canWriteSiteMail, requireSiteMailWriteAccess } from "~/features/site-mails/model/site-mail-access.server"
+import { listSiteMailCategoriesBySite } from "~/features/site-mails/model/site-mail-categories.repository.server"
+import { listSiteMailSites } from "~/features/site-mails/model/site-mail-sites.repository.server"
 import { findSiteMailByContentHash, insertSiteMailPost } from "~/features/site-mails/model/site-mails.repository.server"
 import { parseStandardEml } from "~/features/task-standards/model/task-standards.parser.server"
-import { listCategories } from "~/features/task-standards/model/task-standards.repository.server"
 import { validateEmlFile, validateEmlFiles } from "~/features/task-standards/model/task-standards.schema"
 import { Button } from "~/shared/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "~/shared/ui/card"
@@ -22,21 +23,23 @@ import { PageHeader } from "~/shared/ui/page-header"
 import { Select } from "~/shared/ui/select"
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  await requireUser(request)
+  const user = await requireUser(request)
   const url = new URL(request.url)
   const siteIdParam = url.searchParams.get("site")
-  const [sites, categories] = await Promise.all([listSites(), listCategories()])
-  const sorted = [...sites].sort((a, b) => a.sortOrder - b.sortOrder)
+  const sites = await listSiteMailSites()
+  // 업로드 대상은 이 계정이 쓸 수 있는 메일함 현장만 보여준다.
+  const sorted = sites.filter((site) => canWriteSiteMail(user, site))
+  // 구분자는 현장마다 따로이므로 현장별로 묶어 내려주고, 화면에서 선택한 현장의 목록만 보여준다.
+  const categoriesBySite = await listSiteMailCategoriesBySite(sorted.map((site) => site.id))
   const defaultSiteId = siteIdParam ? Number(siteIdParam) : sorted[0]?.id
-  return { sites: sorted, categories, defaultSiteId: Number.isFinite(defaultSiteId) ? defaultSiteId : null }
+  return { sites: sorted, categoriesBySite, defaultSiteId: Number.isFinite(defaultSiteId) ? defaultSiteId : null }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
   const form = await request.formData()
   const siteId = Number(form.get("site_id"))
-  const site = await getSiteById(siteId)
-  if (!site) return data({ formError: "현장을 찾을 수 없습니다." }, { status: 400 })
-  const user = await requireSiteWriteAccess(request, siteId)
+  if (!Number.isFinite(siteId)) return data({ formError: "현장을 찾을 수 없습니다." }, { status: 400 })
+  const { user } = await requireSiteMailWriteAccess(request, siteId)
 
   const files = form.getAll("eml").filter((value): value is File => value instanceof File)
   const filesError = validateEmlFiles(files)
@@ -49,6 +52,8 @@ export async function action({ request }: ActionFunctionArgs) {
     /* ignore */
   }
 
+  // 다른 현장의 구분자 id가 섞여 들어오면 "없음"으로 저장한다(현장별 구분자 분리).
+  const siteCategoryIds = new Set(((await listSiteMailCategoriesBySite([siteId]))[siteId] ?? []).map((cat) => cat.id))
   const results: { name: string; id: string }[] = []
   const errors: { name: string; error: string }[] = []
 
@@ -79,7 +84,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const post = await insertSiteMailPost({
         siteId,
         parsed,
-        categoryId: categoryIds[i] ? Number(categoryIds[i]) : null,
+        categoryId: categoryIds[i] && siteCategoryIds.has(Number(categoryIds[i])) ? Number(categoryIds[i]) : null,
         createdBy: user.id,
       })
       results.push({ name: file.name, id: post.id })
@@ -92,7 +97,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function SiteMailsNewRoute() {
-  const { sites, categories, defaultSiteId } = useLoaderData<typeof loader>()
+  const { sites, categoriesBySite, defaultSiteId } = useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
   const navigation = useNavigation()
   const submit = useSubmit()
@@ -101,7 +106,7 @@ export default function SiteMailsNewRoute() {
   const [siteId, setSiteId] = useState(defaultSiteId ? String(defaultSiteId) : "")
   const [files, setFiles] = useState<File[]>([])
   const [categoryIds, setCategoryIds] = useState<string[]>([])
-  const sortedCategories = [...categories].sort((a, b) => a.sortOrder - b.sortOrder)
+  const sortedCategories = [...(categoriesBySite[Number(siteId)] ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)
 
   function handleFilesChange(fileList: FileList | null) {
     const next = fileList ? Array.from(fileList) : []
@@ -137,7 +142,16 @@ export default function SiteMailsNewRoute() {
             ) : null}
 
             <Field label="현장" htmlFor="site-id" required>
-              <Select id="site-id" value={siteId} onChange={(e) => setSiteId(e.target.value)} required>
+              <Select
+                id="site-id"
+                value={siteId}
+                onChange={(e) => {
+                  // 현장마다 구분자가 다르므로 현장을 바꾸면 파일별 구분자 선택을 비운다.
+                  setSiteId(e.target.value)
+                  setCategoryIds((prev) => prev.map(() => ""))
+                }}
+                required
+              >
                 <option value="" disabled>
                   현장을 선택하세요
                 </option>

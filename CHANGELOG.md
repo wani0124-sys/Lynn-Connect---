@@ -13,6 +13,11 @@
 ### 추가
 - **Render 배포 설정** — 루트 `render.yaml`(Blueprint) 추가. Node web service `lynn-connect`(singapore, free 플랜), main merge 시 자동 배포, 비밀 환경변수는 대시보드 입력(`sync: false`)·`SESSION_SECRET`은 자동 생성. `.agents/DEPLOYMENT.md`에 "0. Project Override: Render" 장 추가(Cloudflare 기준보다 우선), `AGENTS.md` 기술 추가 사항의 배포 항목 갱신.
 
+### 변경
+- **현장 메일함 현장 목록 분리** (`/site-mails`) — 메일함에서 현장을 삭제하면 대외기관 점검(`/sites`)의 현장과 점검 기록까지 함께 지워지던 문제를 막기 위해, 메일함 전용 현장 목록(`site_mail_sites`)을 따로 두고 두 메뉴의 현장 추가·삭제를 완전히 분리. 쓰기 권한은 메일함 현장별 "담당자"(`site_mail_site_writers`, 현장 관리 팝업에서 지정)로 판정(본사는 항상 가능). 현장 관리 팝업에서 주소 입력 제거, 삭제 시 확인 패널 추가, 업로드 화면은 쓸 수 있는 현장만 표시. DB: `supabase/migrations/20261001090000_separate_site_mail_sites.sql`(기존 현장·메일·현장 계정 권한은 그대로 이관).
+- **현장 메일함 구분자 분리** (`/site-mails`) — 메일함의 구분자 관리가 부서별 업무기준의 `standard_categories`를 그대로 수정해 본사 구분자까지 바뀌던 문제를 막기 위해, 메일함 전용 구분자(`site_mail_categories`)를 따로 둠. 이제 현장 메일함에서 구분자를 추가·수정·삭제해도 본사 화면에는 영향 없음. DB: `supabase/migrations/20261002090000_separate_site_mail_categories.sql`(현재 구분자를 같은 id로 복사해 출발점으로 사용, 본사 구분자는 업무기준/시공기준/기 타로 복원).
+- **현장 메일함 구분자를 현장별로 관리** (`/site-mails`) — 구분자를 메일함 현장마다 따로 두어, 한 현장에서 바꿔도 다른 현장에 영향 없음. 구분자 관리는 그 현장에 쓸 수 있는 계정(본사 또는 현장 담당자)이 직접 할 수 있고, 업로드·상세·일괄 변경에서는 그 현장의 구분자만 고를 수 있음. 새 현장은 빈 구분자 목록으로 시작. DB: `supabase/migrations/20261002120000_site_mail_categories_per_site.sql`(기존 현장 2곳에는 현재 구분자 4개를 각각 복사).
+
 ### 보안
 - 운영 모드(`NODE_ENV=production`)에서 `SESSION_SECRET`이 없으면 서버 기동을 거부하도록 변경(누구나 아는 개발용 기본 시크릿으로 세션 쿠키가 서명되는 것 방지).
 - `.claude/settings.json` 권한 허용 목록에 남아 있던 일회성 테스트 명령(데모 계정 이메일/비밀번호 포함) 제거.

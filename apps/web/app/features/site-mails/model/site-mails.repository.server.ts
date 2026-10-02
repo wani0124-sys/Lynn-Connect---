@@ -9,7 +9,7 @@ import type {
   SiteMailPostSort,
 } from "~/entities/site-mail/model/site-mail.types"
 import type { ParsedStandard } from "~/features/task-standards/model/task-standards.parser.server"
-import { listCategories } from "~/features/task-standards/model/task-standards.repository.server"
+import { listSiteMailCategories } from "~/features/site-mails/model/site-mail-categories.repository.server"
 
 const TABLE_POSTS = "site_mail_posts"
 const TABLE_ATTACHMENTS = "site_mail_attachments"
@@ -131,7 +131,7 @@ export async function listSiteMailPosts(params: ListSiteMailPostsParams): Promis
 
   const rows =
     (data as Pick<PostRow, "id" | "site_id" | "title" | "category_id" | "sender_name" | "sent_at" | "created_at">[]) ?? []
-  const [categories, attachmentCounts] = await Promise.all([listCategories(), getAttachmentCounts(rows.map((row) => row.id))])
+  const [categories, attachmentCounts] = await Promise.all([listSiteMailCategories(siteId), getAttachmentCounts(rows.map((row) => row.id))])
   const catMap = new Map(categories.map((cat) => [cat.id, cat]))
 
   const listItems: SiteMailPostListItem[] = rows.map((row) => ({

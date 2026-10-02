@@ -9,9 +9,10 @@ import {
   type LoaderFunctionArgs,
 } from "react-router"
 import { Check, Download, ExternalLink, List, Paperclip, Pencil, Trash2, Upload, X } from "lucide-react"
-import { canWriteSite } from "~/entities/member/model/member"
 import { CategoryBadge } from "~/entities/task-standard/ui/category-badge"
-import { requireSiteWriteAccess, requireUser } from "~/features/auth/model/session.server"
+import { requireUser } from "~/features/auth/model/session.server"
+import { canWriteSiteMail, requireSiteMailWriteAccess } from "~/features/site-mails/model/site-mail-access.server"
+import { getSiteMailSiteById } from "~/features/site-mails/model/site-mail-sites.repository.server"
 import {
   addSiteMailAttachment,
   deleteSiteMailAttachment,
@@ -21,7 +22,7 @@ import {
   renameSiteMailAttachment,
   updateSiteMailPostMeta,
 } from "~/features/site-mails/model/site-mails.repository.server"
-import { listCategories } from "~/features/task-standards/model/task-standards.repository.server"
+import { assertSiteMailCategory, listSiteMailCategories } from "~/features/site-mails/model/site-mail-categories.repository.server"
 import {
   validateAttachmentFile,
   validateAttachmentFilename,
@@ -40,7 +41,9 @@ import { Select } from "~/shared/ui/select"
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const user = await requireUser(request)
   const postId = params.postId ?? ""
-  const [post, categories] = await Promise.all([getSiteMailPostById(postId), listCategories()])
+  const post = await getSiteMailPostById(postId)
+  // 구분자는 현장마다 따로이므로 이 메일이 속한 현장의 목록만 보여준다.
+  const categories = post ? await listSiteMailCategories(post.siteId) : []
 
   let attachmentUrls: Record<string, string> = {}
   if (post && post.attachments.length > 0) {
@@ -50,18 +53,19 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     attachmentUrls = Object.fromEntries(entries.filter((entry): entry is [string, string] => entry[1] !== null))
   }
 
-  return { post, categories, attachmentUrls, canWrite: post ? canWriteSite(user, post.siteId) : false }
+  const site = post ? await getSiteMailSiteById(post.siteId) : null
+  return { post, categories, attachmentUrls, canWrite: site ? canWriteSiteMail(user, site) : false }
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
   const postId = params.postId ?? ""
   // 이 라우트의 모든 intent는 같은 postId(URL 파라미터)에 대해 동작하므로, 요청 본문이 아니라
   // 게시글의 실제 소속 현장(site_id)을 기준으로 쓰기 권한을 한 번만 검사한다(클라이언트가 보낸 값을
-  // 신뢰하지 않는다). requireSiteWriteAccess가 던지는 redirect는 아래 try/catch 밖에서 그대로 전파돼야
+  // 신뢰하지 않는다). requireSiteMailWriteAccess가 던지는 redirect는 아래 try/catch 밖에서 그대로 전파돼야
   // 하므로(잡히면 안 됨) try 진입 전에 호출한다 — task-standards.detail의 requireHeadquarters 선행 호출과 동일 패턴.
   const existingPost = await getSiteMailPostById(postId)
   if (!existingPost) throw new Response("Not Found", { status: 404 })
-  const user = await requireSiteWriteAccess(request, existingPost.siteId)
+  const { user } = await requireSiteMailWriteAccess(request, existingPost.siteId)
 
   const form = await request.formData()
   const intent = String(form.get("intent") ?? "")
@@ -75,6 +79,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         const bodyHtmlRaw = form.get("bodyHtml")
         const fields: { categoryId?: number | null; title?: string; bodyText?: string; bodyHtml?: string | null } = {}
         if (categoryIdRaw !== null) fields.categoryId = categoryIdRaw ? Number(categoryIdRaw) : null
+        if (fields.categoryId !== undefined) await assertSiteMailCategory(existingPost.siteId, fields.categoryId)
         if (titleRaw !== null) {
           const title = String(titleRaw).trim()
           const validationError = validateTitle(title)

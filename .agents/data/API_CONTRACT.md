@@ -131,17 +131,17 @@ Related repository: sidebar-menu.repository.server.ts#findMenuItemByRoute
 Route: GET /site-mails (routes/site-mails.tsx loader)
 Purpose: 현장별 중요메일 목록 조회(현장 탭 + 구분자 탭 + 검색/정렬/페이지네이션)
 Auth required: 로그인 (requireUser)
-Allowed roles: admin/manager/member 전체 조회 가능(다른 현장 자료도 열람 가능). canWrite(canWriteSite: 본사는 전체, 현장은 자기 현장만)만 EML 업로드/일괄 수정·삭제 UI 노출. canManageCategories(isHeadquarters)만 구분자 관리 UI 노출
+Allowed roles: admin/manager/member 전체 조회 가능(다른 현장 자료도 열람 가능). canWrite(canWriteSite: 본사는 전체, 현장은 자기 현장만)만 EML 업로드/일괄 수정·삭제 UI 노출. canWrite인 계정이 선택 현장의 구분자 관리 UI 사용(2026-10-02 현장별 구분자)
 Request params: ?site=<id>&cat=<id|null>&q=&sort=sent_desc|sent_asc|created_desc|created_asc&page=
-Response: { sites: Site[], selectedSite: Site | null, categories: StandardCategory[], postList: SiteMailPostListResult, canManageCategories: boolean, canWrite: boolean }
-Related repository: site-mails.repository.server.ts#listSiteMailPosts, sites.repository.server.ts#listSites, task-standards.repository.server.ts#listCategories
+Response: { sites: Site[], selectedSite: Site | null, categories: StandardCategory[](선택 현장 것만), postList: SiteMailPostListResult, canManageSites: boolean, writerCandidates, canWrite: boolean }
+Related repository: site-mails.repository.server.ts#listSiteMailPosts, site-mail-sites.repository.server.ts#listSiteMailSites, site-mail-categories.repository.server.ts#listSiteMailCategories
 
-Route: POST /site-mails (routes/site-mails.tsx action, intent=site.*|category.*|post.bulkUpdate|post.bulkDelete)
-Purpose: 현장 관리(/sites와 공유하는 sites 카탈로그 추가·수정·삭제·순서 변경), 구분자 관리(부서 화면과 공유하는 standard_categories에 그대로 반영), 선택한 메일 일괄 구분자 적용/삭제
-Auth required: site.*/category.*는 로그인 + 본사 권한(requireHeadquarters). post.bulkUpdate/post.bulkDelete는 requireSiteWriteAccess(request, siteId)
-Request body: site.*는 /sites의 동일 intent(site.create|site.rename|site.delete|site.reorder)와 같음. category.*는 task-standards의 동일 intent와 같음. post.bulkUpdate/bulkDelete는 { siteId, ids: JSON, categoryId? }
+Route: POST /site-mails (routes/site-mails.tsx action, intent=site.*|site.setWriters|category.*|post.bulkUpdate|post.bulkDelete)
+Purpose: 현장 관리(메일함 전용 site_mail_sites 추가·수정·삭제·순서 변경·담당자 지정 — /sites의 현장과 연동되지 않음, 2026-10-01), 구분자 관리(메일함 현장별 site_mail_categories — 다른 현장·부서 화면 구분자와 연동되지 않음, 2026-10-02), 선택한 메일 일괄 구분자 적용/삭제
+Auth required: site.*는 로그인 + 본사 권한(requireHeadquarters). category.*/post.bulkUpdate/post.bulkDelete는 requireSiteMailWriteAccess(request, siteId)(본사 또는 해당 메일함 현장 담당자)
+Request body: site.create/rename은 { name, id? }(주소 없음), site.delete는 { id }, site.reorder는 { items: JSON }, site.setWriters는 { id, memberIds: JSON(string[]) }. category.*는 task-standards의 동일 intent 본문 + { siteId }(필수, 그 현장의 구분자만 수정됨). post.bulkUpdate의 categoryId는 같은 현장 구분자여야 한다(아니면 400). post.bulkUpdate/bulkDelete는 { siteId, ids: JSON, categoryId? }
 Response: 성공 시 { ok: true }. 실패 시 { error: string }(400)
-Related repository: sites.repository.server.ts#createSite/renameSite/deleteSite/reorderSites, task-standards.repository.server.ts#createCategory/renameCategory/deleteCategory/reorderCategories, site-mails.repository.server.ts#bulkUpdateSiteMailPostMeta/bulkDeleteSiteMailPosts
+Related repository: site-mail-sites.repository.server.ts#createSiteMailSite/renameSiteMailSite/deleteSiteMailSite/reorderSiteMailSites/setSiteMailSiteWriters, site-mail-categories.repository.server.ts#createSiteMailCategory/renameSiteMailCategory/deleteSiteMailCategory/reorderSiteMailCategories, site-mails.repository.server.ts#bulkUpdateSiteMailPostMeta/bulkDeleteSiteMailPosts
 Notes: bulk 함수는 update/delete 쿼리 자체를 site_id로도 좁혀서, 요청의 siteId를 통과했더라도 실제로는 다른 현장 소속인 id는 조용히 무시된다.
 
 Route: GET/POST /site-mails/new (routes/site-mails-new.tsx loader/action)

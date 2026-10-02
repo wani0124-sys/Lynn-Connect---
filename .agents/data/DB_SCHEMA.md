@@ -546,11 +546,11 @@ Notes:
 
 Schema: public
 Table: site_mail_posts
-Purpose: 현장별 중요메일 관리("부서별 업무기준"과 동일한 EML 업로드·정리 기능을 현장 단위로 제공, 2026-09-30 사용자 요청). standard_posts와 달리 분류 축이 부서가 아니라 현장(sites)이다. 구분자(카테고리)는 별도 테이블을 새로 만들지 않고 standard_categories를 그대로 재사용한다(부서 화면과 현장 화면이 같은 구분자 taxonomy를 공유).
+Purpose: 현장별 중요메일 관리("부서별 업무기준"과 동일한 EML 업로드·정리 기능을 현장 단위로 제공, 2026-09-30 사용자 요청). standard_posts와 달리 분류 축이 부서가 아니라 현장(sites)이다. 구분자(카테고리)는 처음에는 standard_categories를 공유했으나, 2026-10-02부터 메일함 전용 site_mail_categories를 쓴다(본사와 현장 구분자 독립).
 Columns:
   id uuid
   site_id bigint (FK, on delete cascade)
-  category_id bigint (FK, on delete set null) -- standard_categories 참조
+  category_id bigint (FK, on delete set null) -- site_mail_categories 참조(2026-10-02 이전에는 standard_categories)
   title text
   sender_email text
   sender_name text
@@ -563,17 +563,18 @@ Columns:
   created_at timestamptz
   updated_at timestamptz
 Primary key: id
-Foreign keys: site_id -> sites(id) on delete cascade, category_id -> standard_categories(id) on delete set null
+Foreign keys: site_id -> site_mail_sites(id) on delete cascade (2026-10-01 이전에는 sites(id)), category_id -> site_mail_categories(id) on delete set null (2026-10-02 이전에는 standard_categories(id))
 Indexes: site_mail_posts_site_id_idx, site_mail_posts_category_id_idx, site_mail_posts_sent_at_idx (sent_at desc)
 Unique constraints: site_mail_posts_site_content_hash_key (site_id, content_hash) — 같은 메일이 여러 현장에 전달될 수 있어 전역이 아니라 현장 단위로만 중복을 막는다(standard_posts의 전역 unique와 다른 점).
 RLS policies: RLS enabled. site_mail_posts_no_direct_access(전체 거부, anon/authenticated) — service role로만 접근.
 RPC/functions: 없음
 Related APIs: apps/web/app/routes/site-mails.tsx (loader/action, intent=category.*/post.bulkUpdate/post.bulkDelete), apps/web/app/routes/site-mails-new.tsx (action: EML 파싱 후 insertSiteMailPost), apps/web/app/routes/site-mails-detail.tsx (loader/action: meta.update/attachment.*/post.delete) — apps/web/app/features/site-mails/model/site-mails.repository.server.ts를 직접 호출
 Related frontend screens: /site-mails, /site-mails/new, /site-mails/:postId
-Migration file: supabase/migrations/20260930090000_site_mails.sql
+Migration file: supabase/migrations/20260930090000_site_mails.sql, supabase/migrations/20261001090000_separate_site_mail_sites.sql(site_id FK 대상 교체), supabase/migrations/20261002090000_separate_site_mail_categories.sql(category_id FK 대상 교체)
 Notes:
-  - 쓰기 권한은 site_inspections와 동일하게 `requireSiteWriteAccess(request, siteId)`(`canWriteSite`)로 판정한다: 본사(admin/manager)는 모든 현장에, 현장(member) 계정은 자신의 Member.siteId와 일치하는 site_id에만 쓸 수 있다(2026-09-30 사용자 확인 — standard_posts와 달리 본사 전용이 아니다). 읽기는 requireUser만으로 전체 공개.
-  - 구분자(카테고리) 자체의 생성/수정/삭제는 부서 화면과 동일하게 본사 전용(requireHeadquarters)이다 — standard_categories를 공유하므로 현장 계정이 taxonomy 자체를 바꿀 수는 없다.
+  - (2026-10-01 변경) 현장 목록은 대외기관 점검의 sites가 아니라 메일함 전용 site_mail_sites를 쓴다 — 두 메뉴의 현장 추가/삭제가 서로 연동되지 않는다.
+  - 쓰기 권한은 `requireSiteMailWriteAccess(request, siteId)`(`canWriteSiteMail`, features/site-mails/model/site-mail-access.server.ts)로 판정한다: 본사(admin/manager)는 모든 메일함 현장에, 현장(member) 계정은 site_mail_site_writers에 담당자로 지정된 현장에만 쓸 수 있다(2026-10-01 사용자 결정: "현장별 담당자 지정"). 대외기관 점검의 Member.siteId 기준(canWriteSite)과는 별개다. 읽기는 requireUser만으로 전체 공개.
+  - (2026-10-02 변경) 구분자는 메일함 현장별 site_mail_categories를 쓴다 — 한 현장에서 구분자를 추가·수정·삭제해도 다른 현장이나 부서별 업무기준(standard_categories)에는 반영되지 않는다. 관리 권한은 그 현장에 쓸 수 있는 계정(본사 또는 담당자, requireSiteMailWriteAccess).
   - site-mails-detail.tsx의 action은 요청 본문의 siteId를 신뢰하지 않고, params.postId로 게시글을 먼저 조회해 실제 site_id로 권한을 검사한다. bulk 함수(bulkUpdateSiteMailPostMeta/bulkDeleteSiteMailPosts)도 update/delete 쿼리 자체에 `.eq("site_id", siteId)`를 포함해, 다른 현장 소속 id가 섞여 들어와도 영향을 주지 않는다.
   - EML 파싱(task-standards.parser.server.ts#parseStandardEml)과 첨부 검증(task-standards.schema.ts)을 그대로 재사용한다 — 로직이 도메인 특화적이지 않아 site-mails 전용 복제본을 두지 않았다.
 
@@ -599,4 +600,69 @@ Migration file: supabase/migrations/20260930090000_site_mails.sql
 Notes:
   - Storage 버킷 site-mails는 task-standards와 동일하게 private(public=false)이며 서버가 service role key로만 업로드하고 다운로드는 signed URL(TTL 300초)로 발급한다.
   - sidebar_menu_items_route_check에 "/site-mails"를 추가해 고정 화면을 5개 -> 6개로 확장했다(같은 migration). "현장" 그룹이 있으면 그 하위에, 없으면 최상위에 "현장 메일함" 리프를 시드한다(20260716090000_add_work_orders_menu_route.sql과 동일 패턴).
+
+Schema: public
+Table: site_mail_sites
+Purpose: 현장 메일함(/site-mails) 전용 현장 목록(2026-10-01 사용자 요청으로 대외기관 점검의 sites에서 분리). 이 표의 추가·삭제는 sites/site_inspections에 영향을 주지 않는다.
+Columns:
+  id bigint (identity, by default)
+  name text
+  sort_order int
+  created_at timestamptz
+  updated_at timestamptz
+Primary key: id
+Foreign keys: 없음
+Indexes: 없음(행 수가 현장 수 수준)
+Unique constraints: name
+RLS policies: RLS enabled. site_mail_sites_no_direct_access(전체 거부, anon/authenticated).
+RPC/functions: 없음
+Related APIs: apps/web/app/routes/site-mails.tsx (action intent=site.create/site.rename/site.delete/site.reorder/site.setWriters, 본사 전용) — features/site-mails/model/site-mail-sites.repository.server.ts
+Related frontend screens: /site-mails (헤더의 "현장 관리" 팝업, 현장 탭), /site-mails/new (업로드 대상 현장 선택)
+Migration file: supabase/migrations/20261001090000_separate_site_mail_sites.sql
+Notes:
+  - 마이그레이션 시점의 sites 행을 같은 id로 복사해 기존 site_mail_posts.site_id가 그대로 유효하도록 했고, 이후 identity 시퀀스를 max(id) 뒤로 맞췄다. 복사 이후 두 목록은 완전히 독립적이다.
+  - 삭제 시 site_mail_posts/site_mail_attachments는 cascade로 지워지고, Storage 파일은 deleteSiteMailSite가 먼저 정리한다. UI에서 확인 패널을 거친다.
+
+Schema: public
+Table: site_mail_site_writers
+Purpose: 메일함 현장별 담당자(쓰기 권한이 있는 현장 계정). 본사 계정은 여기 없어도 항상 쓰기 가능.
+Columns:
+  site_id bigint (FK, on delete cascade)
+  member_id text (FK, on delete cascade)
+  created_at timestamptz
+Primary key: (site_id, member_id)
+Foreign keys: site_id -> site_mail_sites(id) on delete cascade, member_id -> members(id) on delete cascade
+Indexes: site_mail_site_writers_member_id_idx
+Unique constraints: PK
+RLS policies: RLS enabled. site_mail_site_writers_no_direct_access(전체 거부, anon/authenticated).
+RPC/functions: 없음
+Related APIs: apps/web/app/routes/site-mails.tsx (intent=site.setWriters — 목록 통째 교체), features/site-mails/model/site-mail-access.server.ts#canWriteSiteMail
+Related frontend screens: /site-mails "현장 관리" 팝업의 "담당자" 버튼
+Migration file: supabase/migrations/20261001090000_separate_site_mail_sites.sql
+Notes:
+  - 마이그레이션 시점에 members.site_id가 있던 현장(member) 계정을 해당 현장의 담당자로 옮겨, 분리 전과 같은 쓰기 권한을 보존했다.
+Schema: public
+Table: site_mail_categories
+Purpose: 현장 메일함(/site-mails) 전용 구분자(2026-10-02 사용자 요청으로 standard_categories에서 분리 — "본사와 현장은 별개, 현장은 입맛에 맞게 바꿔 쓴다"). 같은 날 현장별 목록으로 확장("각 현장별로도 구분자는 각각 관리") — 현장마다 독립적인 구분자 세트를 갖는다.
+Columns:
+  id bigint (identity, by default)
+  site_id bigint not null (FK, on delete cascade) -- 소속 메일함 현장
+  name text
+  color text (default '#6b7280')
+  sort_order int
+  created_at timestamptz
+Primary key: id
+Foreign keys: site_id -> site_mail_sites(id) on delete cascade
+Indexes: site_mail_categories_site_id_idx
+Unique constraints: site_mail_categories_site_name_key (site_id, name) — 같은 이름도 현장이 다르면 따로 만들 수 있다
+RLS policies: RLS enabled. site_mail_categories_no_direct_access(전체 거부, anon/authenticated).
+RPC/functions: 없음
+Related APIs: apps/web/app/routes/site-mails.tsx (intent=category.*, { siteId } 필수, requireSiteMailWriteAccess — 본사 또는 그 현장 담당자) — features/site-mails/model/site-mail-categories.repository.server.ts
+Related frontend screens: /site-mails (구분자 탭 + 구분자 관리 팝업), /site-mails/new, /site-mails/:postId
+Migration file: supabase/migrations/20261002090000_separate_site_mail_categories.sql, supabase/migrations/20261002120000_site_mail_categories_per_site.sql(site_id 추가)
+Notes:
+  - 마이그레이션 시점의 standard_categories 행을 같은 id로 복사해 기존 site_mail_posts.category_id가 그대로 유효하도록 했다. 복사 이후 두 목록은 완전히 독립적이다.
+  - 삭제 시 해당 구분자의 메일은 category_id=NULL로 정리한다.
+  - 20261002120000에서 당시 공유 목록을 현장마다 한 벌씩 복사하고 메일의 category_id를 같은 현장·같은 이름 복사본으로 옮겼다. 이후 새로 만든 현장은 빈 목록으로 시작한다.
+  - 메일의 category_id가 같은 현장 소속인지는 DB 제약이 아니라 앱(assertSiteMailCategory, 업로드 시 현장 구분자 집합 검사)에서 보장한다. 수정·삭제·순서 변경 쿼리도 모두 site_id로 좁힌다.
 ```

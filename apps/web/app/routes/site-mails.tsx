@@ -1,29 +1,39 @@
 import { useEffect, useState } from "react"
 import { Link, data, useFetcher, useLoaderData, useSearchParams, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
 import { Plus, Search, Settings2 } from "lucide-react"
-import { canWriteSite, isHeadquarters } from "~/entities/member/model/member"
+import { isHeadquarters } from "~/entities/member/model/member"
 import { usePageMenuTitle } from "~/entities/sidebar-menu/lib/use-page-menu-title"
 import { CategoryBadge } from "~/entities/task-standard/ui/category-badge"
 import type { SiteMailPostSort } from "~/entities/site-mail/model/site-mail.types"
-import { requireHeadquarters, requireSiteWriteAccess, requireUser } from "~/features/auth/model/session.server"
+import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
+import { listMembers } from "~/features/members/model/members.repository.server"
+import { canWriteSiteMail, requireSiteMailWriteAccess } from "~/features/site-mails/model/site-mail-access.server"
+import {
+  assertSiteMailCategory,
+  createSiteMailCategory,
+  deleteSiteMailCategory,
+  listSiteMailCategories,
+  renameSiteMailCategory,
+  reorderSiteMailCategories,
+} from "~/features/site-mails/model/site-mail-categories.repository.server"
+import {
+  createSiteMailSite,
+  deleteSiteMailSite,
+  listSiteMailSites,
+  renameSiteMailSite,
+  reorderSiteMailSites,
+  setSiteMailSiteWriters,
+} from "~/features/site-mails/model/site-mail-sites.repository.server"
 import {
   bulkDeleteSiteMailPosts,
   bulkUpdateSiteMailPostMeta,
   listSiteMailPosts,
 } from "~/features/site-mails/model/site-mails.repository.server"
 import { SiteMailBulkActionBar } from "~/features/site-mails/ui/bulk-action-bar"
+import { SiteMailSiteManageModal } from "~/features/site-mails/ui/site-manage-modal"
 import { SiteMailUploadModal } from "~/features/site-mails/ui/upload-modal"
-import {
-  createCategory,
-  deleteCategory,
-  listCategories,
-  renameCategory,
-  reorderCategories,
-} from "~/features/task-standards/model/task-standards.repository.server"
 import { CategoryManageModal } from "~/features/task-standards/ui/category-manage-modal"
-import { createSite, deleteSite, listSites, renameSite, reorderSites } from "~/features/sites/model/sites.repository.server"
 import { validateSiteName } from "~/features/sites/model/sites.schema"
-import { SiteManageModal } from "~/features/sites/ui/site-manage-modal"
 import { formatDate } from "~/shared/lib/format"
 import { Button } from "~/shared/ui/button"
 import { Card } from "~/shared/ui/card"
@@ -52,8 +62,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const sort = (url.searchParams.get("sort") as SiteMailPostSort | null) ?? "sent_desc"
   const page = Number(url.searchParams.get("page") ?? "1") || 1
 
-  const sites = await listSites()
-  const sorted = [...sites].sort((a, b) => a.sortOrder - b.sortOrder)
+  const canManageSites = isHeadquarters(user.role)
+  const [sorted, members] = await Promise.all([listSiteMailSites(), canManageSites ? listMembers() : Promise.resolve([])])
   const siteIdParam = url.searchParams.get("site")
   const parsedSiteId = siteIdParam ? Number(siteIdParam) : sorted[0]?.id
   const selectedSiteId = Number.isFinite(parsedSiteId) ? (parsedSiteId as number) : null
@@ -62,7 +72,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     (selectedSiteId !== null ? sorted.find((site) => site.id === selectedSiteId) : undefined) ?? sorted[0] ?? null
 
   const [categories, postList] = await Promise.all([
-    listCategories(),
+    selectedSite ? listSiteMailCategories(selectedSite.id) : Promise.resolve([]),
     selectedSite
       ? listSiteMailPosts({ siteId: selectedSite.id, categoryId, search, sort, page, limit: PAGE_SIZE })
       : Promise.resolve({ rows: [], total: 0, page, limit: PAGE_SIZE }),
@@ -73,9 +83,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     selectedSite,
     categories,
     postList,
-    canManageCategories: isHeadquarters(user.role),
-    canManageSites: isHeadquarters(user.role),
-    canWrite: selectedSite ? canWriteSite(user, selectedSite.id) : false,
+    canManageSites,
+    // 담당자로 지정할 수 있는 현장 계정(본사 계정은 항상 쓰기 가능하므로 후보에서 제외).
+    writerCandidates: members
+      .filter((member) => !isHeadquarters(member.role))
+      .map((member) => ({ id: member.id, name: member.name, email: member.email })),
+    canWrite: selectedSite ? canWriteSiteMail(user, selectedSite) : false,
   }
 }
 
@@ -85,13 +98,13 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     switch (intent) {
-      // 현장 카탈로그는 /sites(대외기관 점검)와 공유한다 — 여기서 추가·수정·삭제해도 양쪽 화면에 똑같이 반영된다.
+      // 메일함 전용 현장 목록(site_mail_sites). 대외기관 점검(/sites)의 현장과 연동되지 않는다.
       case "site.create": {
         await requireHeadquarters(request)
         const name = String(form.get("name") ?? "").trim()
         const validationError = validateSiteName(name)
         if (validationError) return data({ error: validationError }, { status: 400 })
-        await createSite(name, String(form.get("address") ?? "").trim() || null)
+        await createSiteMailSite(name)
         return { ok: true }
       }
       case "site.rename": {
@@ -99,52 +112,65 @@ export async function action({ request }: ActionFunctionArgs) {
         const name = String(form.get("name") ?? "").trim()
         const validationError = validateSiteName(name)
         if (validationError) return data({ error: validationError }, { status: 400 })
-        await renameSite(Number(form.get("id")), name, String(form.get("address") ?? "").trim() || null)
+        await renameSiteMailSite(Number(form.get("id")), name)
         return { ok: true }
       }
       case "site.delete": {
         await requireHeadquarters(request)
-        await deleteSite(Number(form.get("id")))
+        await deleteSiteMailSite(Number(form.get("id")))
         return { ok: true }
       }
       case "site.reorder": {
         await requireHeadquarters(request)
-        await reorderSites(JSON.parse(String(form.get("items") ?? "[]")))
+        await reorderSiteMailSites(JSON.parse(String(form.get("items") ?? "[]")))
         return { ok: true }
       }
-      case "category.create": {
+      case "site.setWriters": {
         await requireHeadquarters(request)
-        await createCategory(String(form.get("name") ?? ""), String(form.get("color") ?? "#6b7280"))
+        const memberIds = JSON.parse(String(form.get("memberIds") ?? "[]")) as string[]
+        await setSiteMailSiteWriters(Number(form.get("id")), memberIds)
+        return { ok: true }
+      }
+      // 메일함 현장별 구분자(site_mail_categories.site_id). 부서별 업무기준·다른 현장의 구분자와 연동되지 않는다.
+      // 그 현장에 쓸 수 있는 계정(본사 또는 담당자)이 자기 현장 구분자를 직접 관리한다.
+      case "category.create": {
+        const siteId = Number(form.get("siteId"))
+        await requireSiteMailWriteAccess(request, siteId)
+        await createSiteMailCategory(siteId, String(form.get("name") ?? ""), String(form.get("color") ?? "#6b7280"))
         return { ok: true }
       }
       case "category.rename": {
-        await requireHeadquarters(request)
-        await renameCategory(Number(form.get("id")), String(form.get("name") ?? ""), String(form.get("color") ?? "#6b7280"))
+        const siteId = Number(form.get("siteId"))
+        await requireSiteMailWriteAccess(request, siteId)
+        await renameSiteMailCategory(siteId, Number(form.get("id")), String(form.get("name") ?? ""), String(form.get("color") ?? "#6b7280"))
         return { ok: true }
       }
       case "category.delete": {
-        await requireHeadquarters(request)
-        await deleteCategory(Number(form.get("id")))
+        const siteId = Number(form.get("siteId"))
+        await requireSiteMailWriteAccess(request, siteId)
+        await deleteSiteMailCategory(siteId, Number(form.get("id")))
         return { ok: true }
       }
       case "category.reorder": {
-        await requireHeadquarters(request)
-        await reorderCategories(JSON.parse(String(form.get("items") ?? "[]")))
+        const siteId = Number(form.get("siteId"))
+        await requireSiteMailWriteAccess(request, siteId)
+        await reorderSiteMailCategories(siteId, JSON.parse(String(form.get("items") ?? "[]")))
         return { ok: true }
       }
       case "post.bulkUpdate": {
         const siteId = Number(form.get("siteId"))
-        const user = await requireSiteWriteAccess(request, siteId)
+        const { user } = await requireSiteMailWriteAccess(request, siteId)
         const ids = JSON.parse(String(form.get("ids") ?? "[]")) as string[]
         const categoryIdRaw = form.get("categoryId")
         const fields: { categoryId?: number | null } = {}
         if (categoryIdRaw !== null) fields.categoryId = categoryIdRaw ? Number(categoryIdRaw) : null
+        if (fields.categoryId !== undefined) await assertSiteMailCategory(siteId, fields.categoryId)
         await bulkUpdateSiteMailPostMeta(siteId, ids, fields, user.id)
         return { ok: true }
       }
       case "post.bulkDelete": {
         const siteId = Number(form.get("siteId"))
-        await requireSiteWriteAccess(request, siteId)
+        await requireSiteMailWriteAccess(request, siteId)
         const ids = JSON.parse(String(form.get("ids") ?? "[]")) as string[]
         await bulkDeleteSiteMailPosts(siteId, ids)
         return { ok: true }
@@ -159,7 +185,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function SiteMailsRoute() {
-  const { sites, selectedSite, categories, postList, canManageCategories, canManageSites, canWrite } =
+  const { sites, selectedSite, categories, postList, canManageSites, writerCandidates, canWrite } =
     useLoaderData<typeof loader>()
   const [searchParams, setSearchParams] = useSearchParams()
   const catFetcher = useFetcher<typeof action>()
@@ -275,7 +301,7 @@ export default function SiteMailsRoute() {
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Tabs items={catTabs} value={selectedCatParam} onChange={(value) => updateParams({ cat: value || null })} />
-                {canManageCategories ? (
+                {canWrite ? (
                   <Button variant="outline" onClick={() => setCatModalOpen(true)}>
                     <Settings2 className="size-4" aria-hidden />
                     구분자 관리
@@ -455,14 +481,16 @@ export default function SiteMailsRoute() {
       )}
 
       {canManageSites ? (
-        <SiteManageModal
+        <SiteMailSiteManageModal
           open={siteModalOpen}
           onClose={() => setSiteModalOpen(false)}
           sites={sites}
+          writerCandidates={writerCandidates}
           pending={siteFetcher.state !== "idle"}
-          onCreate={(name, address) => siteFetcher.submit({ intent: "site.create", name, address }, { method: "post" })}
-          onRename={(id, name, address) =>
-            siteFetcher.submit({ intent: "site.rename", id: String(id), name, address }, { method: "post" })
+          onCreate={(name) => siteFetcher.submit({ intent: "site.create", name }, { method: "post" })}
+          onRename={(id, name) => siteFetcher.submit({ intent: "site.rename", id: String(id), name }, { method: "post" })}
+          onSetWriters={(id, memberIds) =>
+            siteFetcher.submit({ intent: "site.setWriters", id: String(id), memberIds: JSON.stringify(memberIds) }, { method: "post" })
           }
           onDelete={(id) => siteFetcher.submit({ intent: "site.delete", id: String(id) }, { method: "post" })}
           onReorder={(items) => {
@@ -471,19 +499,19 @@ export default function SiteMailsRoute() {
         />
       ) : null}
 
-      {canManageCategories ? (
+      {canWrite && selectedSite ? (
         <CategoryManageModal
           open={catModalOpen}
           onClose={() => setCatModalOpen(false)}
           categories={categories}
           pending={catFetcher.state !== "idle"}
-          onCreate={(name, color) => catFetcher.submit({ intent: "category.create", name, color }, { method: "post" })}
+          onCreate={(name, color) => catFetcher.submit({ intent: "category.create", siteId: String(selectedSite.id), name, color }, { method: "post" })}
           onRename={(id, name, color) =>
-            catFetcher.submit({ intent: "category.rename", id: String(id), name, color }, { method: "post" })
+            catFetcher.submit({ intent: "category.rename", siteId: String(selectedSite.id), id: String(id), name, color }, { method: "post" })
           }
-          onDelete={(id) => catFetcher.submit({ intent: "category.delete", id: String(id) }, { method: "post" })}
+          onDelete={(id) => catFetcher.submit({ intent: "category.delete", siteId: String(selectedSite.id), id: String(id) }, { method: "post" })}
           onReorder={(items) => {
-            if (items.length) catFetcher.submit({ intent: "category.reorder", items: JSON.stringify(items) }, { method: "post" })
+            if (items.length) catFetcher.submit({ intent: "category.reorder", siteId: String(selectedSite.id), items: JSON.stringify(items) }, { method: "post" })
           }}
         />
       ) : null}
