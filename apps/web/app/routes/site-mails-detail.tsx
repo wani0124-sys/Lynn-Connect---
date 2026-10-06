@@ -463,10 +463,11 @@ export default function SiteMailsDetailRoute() {
               </div>
             </div>
           ) : post.bodyHtml ? (
+            // 본문 링크는 새 탭으로 연다(<base target="_blank"> + allow-popups). 스크립트·same-origin은 계속 차단한다.
             <iframe
               title="메일 본문"
-              srcDoc={post.bodyHtml}
-              sandbox=""
+              srcDoc={`<base target="_blank">${post.bodyHtml}`}
+              sandbox="allow-popups allow-popups-to-escape-sandbox"
               referrerPolicy="no-referrer"
               className="h-[480px] w-full rounded-md border border-border bg-white"
             />
