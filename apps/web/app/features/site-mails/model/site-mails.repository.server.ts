@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { getSupabaseServerClient } from "~/shared/lib/supabase.server"
 import { formatSenderName } from "~/entities/task-standard/lib/format-sender-name"
+import { getCategoryPathLabel, getCategoryWithDescendantIds } from "~/entities/site-mail/lib/category-tree"
 import type {
   SiteMailAttachment,
   SiteMailPost,
@@ -101,6 +102,7 @@ async function getAttachmentCounts(postIds: string[]): Promise<Map<string, numbe
 export async function listSiteMailPosts(params: ListSiteMailPostsParams): Promise<SiteMailPostListResult> {
   const { siteId, categoryId, search, sort = "sent_desc", page = 1, limit = 30 } = params
   const supabase = getSupabaseServerClient()
+  const categories = await listSiteMailCategories(siteId)
 
   let query = supabase
     .from(TABLE_POSTS)
@@ -110,7 +112,8 @@ export async function listSiteMailPosts(params: ListSiteMailPostsParams): Promis
   if (categoryId === "null") {
     query = query.is("category_id", null)
   } else if (categoryId) {
-    query = query.eq("category_id", Number(categoryId))
+    // 상위 구분자로 거르면 하위 구분자(2·3단계)에 붙은 메일까지 함께 보인다.
+    query = query.in("category_id", getCategoryWithDescendantIds(categories, Number(categoryId)))
   }
 
   if (search?.trim()) {
@@ -131,7 +134,7 @@ export async function listSiteMailPosts(params: ListSiteMailPostsParams): Promis
 
   const rows =
     (data as Pick<PostRow, "id" | "site_id" | "title" | "category_id" | "sender_name" | "sent_at" | "created_at">[]) ?? []
-  const [categories, attachmentCounts] = await Promise.all([listSiteMailCategories(siteId), getAttachmentCounts(rows.map((row) => row.id))])
+  const attachmentCounts = await getAttachmentCounts(rows.map((row) => row.id))
   const catMap = new Map(categories.map((cat) => [cat.id, cat]))
 
   const listItems: SiteMailPostListItem[] = rows.map((row) => ({
@@ -144,6 +147,7 @@ export async function listSiteMailPosts(params: ListSiteMailPostsParams): Promis
     createdAt: row.created_at,
     categoryName: row.category_id ? (catMap.get(row.category_id)?.name ?? null) : null,
     categoryColor: row.category_id ? (catMap.get(row.category_id)?.color ?? null) : null,
+    categoryPath: row.category_id ? getCategoryPathLabel(categories, row.category_id) : null,
     attachmentCount: attachmentCounts.get(row.id) ?? 0,
   }))
 

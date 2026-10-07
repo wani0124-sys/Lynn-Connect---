@@ -9,6 +9,7 @@ import {
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from "react-router"
+import { flattenCategoryOptions } from "~/entities/site-mail/lib/category-tree"
 import { requireUser } from "~/features/auth/model/session.server"
 import { canWriteSiteMail, requireSiteMailWriteAccess } from "~/features/site-mails/model/site-mail-access.server"
 import { listSiteMailCategoriesBySite } from "~/features/site-mails/model/site-mail-categories.repository.server"
@@ -106,7 +107,7 @@ export default function SiteMailsNewRoute() {
   const [siteId, setSiteId] = useState(defaultSiteId ? String(defaultSiteId) : "")
   const [files, setFiles] = useState<File[]>([])
   const [categoryIds, setCategoryIds] = useState<string[]>([])
-  const sortedCategories = [...(categoriesBySite[Number(siteId)] ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)
+  const categoryOptions = flattenCategoryOptions(categoriesBySite[Number(siteId)] ?? [])
 
   function handleFilesChange(fileList: FileList | null) {
     const next = fileList ? Array.from(fileList) : []
@@ -190,9 +191,9 @@ export default function SiteMailsNewRoute() {
                       onChange={(e) => setCategoryIds((prev) => prev.map((value, i) => (i === index ? e.target.value : value)))}
                     >
                       <option value="">구분자 없음</option>
-                      {sortedCategories.map((cat) => (
+                      {categoryOptions.map((cat) => (
                         <option key={cat.id} value={cat.id}>
-                          {cat.name}
+                          {cat.label}
                         </option>
                       ))}
                     </Select>

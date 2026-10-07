@@ -1,7 +1,8 @@
 import { useRef, useState, type DragEvent } from "react"
 import { useFetcher } from "react-router"
 import { Mail, X } from "lucide-react"
-import type { StandardCategory } from "~/entities/task-standard/model/task-standard.types"
+import { flattenCategoryOptions } from "~/entities/site-mail/lib/category-tree"
+import type { SiteMailCategory } from "~/entities/site-mail/model/site-mail.types"
 import { cn } from "~/shared/lib/cn"
 import { Button } from "~/shared/ui/button"
 import { Modal } from "~/shared/ui/modal"
@@ -11,7 +12,7 @@ export interface SiteMailUploadModalProps {
   open: boolean
   onClose: () => void
   siteId: number
-  categories: StandardCategory[]
+  categories: SiteMailCategory[]
 }
 
 interface UploadActionData {
@@ -29,7 +30,7 @@ export function SiteMailUploadModal({ open, onClose, siteId, categories }: SiteM
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const sortedCategories = [...categories].sort((a, b) => a.sortOrder - b.sortOrder)
+  const categoryOptions = flattenCategoryOptions(categories)
   const pending = fetcher.state !== "idle"
   const data = fetcher.data
 
@@ -131,9 +132,9 @@ export function SiteMailUploadModal({ open, onClose, siteId, categories }: SiteM
                       onChange={(e) => setCategoryIds((prev) => prev.map((v, i) => (i === index ? e.target.value : v)))}
                     >
                       <option value="">구분자 없음</option>
-                      {sortedCategories.map((cat) => (
+                      {categoryOptions.map((cat) => (
                         <option key={cat.id} value={cat.id}>
-                          {cat.name}
+                          {cat.label}
                         </option>
                       ))}
                     </Select>

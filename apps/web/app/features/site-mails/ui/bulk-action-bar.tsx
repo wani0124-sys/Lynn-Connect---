@@ -1,13 +1,14 @@
 import { useState } from "react"
 import { Trash2 } from "lucide-react"
-import type { StandardCategory } from "~/entities/task-standard/model/task-standard.types"
+import { flattenCategoryOptions } from "~/entities/site-mail/lib/category-tree"
+import type { SiteMailCategory } from "~/entities/site-mail/model/site-mail.types"
 import { Button } from "~/shared/ui/button"
 import { ConfirmPanel } from "~/shared/ui/confirm-panel"
 import { Select } from "~/shared/ui/select"
 
 export interface SiteMailBulkActionBarProps {
   count: number
-  categories: StandardCategory[]
+  categories: SiteMailCategory[]
   pending: boolean
   onApplyCategory: (categoryId: number | null) => void
   onDelete: () => void
@@ -17,7 +18,7 @@ export interface SiteMailBulkActionBarProps {
 export function SiteMailBulkActionBar({ count, categories, pending, onApplyCategory, onDelete }: SiteMailBulkActionBarProps) {
   const [categoryId, setCategoryId] = useState("")
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const sortedCategories = [...categories].sort((a, b) => a.sortOrder - b.sortOrder)
+  const categoryOptions = flattenCategoryOptions(categories)
 
   if (count === 0) return null
 
@@ -30,9 +31,9 @@ export function SiteMailBulkActionBar({ count, categories, pending, onApplyCateg
           <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
             <option value="">구분자 선택</option>
             <option value="none">구분자 없음</option>
-            {sortedCategories.map((cat) => (
+            {categoryOptions.map((cat) => (
               <option key={cat.id} value={cat.id}>
-                {cat.name}
+                {cat.label}
               </option>
             ))}
           </Select>
