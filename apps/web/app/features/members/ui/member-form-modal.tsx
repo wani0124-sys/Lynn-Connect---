@@ -10,6 +10,7 @@ import type { MemberFormValues } from "~/features/members/model/member-form.type
 import type { Site } from "~/entities/site/model/site.types"
 import type { SiteMailSite } from "~/entities/site-mail/model/site-mail.types"
 import { Button } from "~/shared/ui/button"
+import { Checkbox } from "~/shared/ui/checkbox"
 import { Field } from "~/shared/ui/field"
 import { Input } from "~/shared/ui/input"
 import { Modal } from "~/shared/ui/modal"
@@ -26,6 +27,8 @@ export interface MemberFormModalProps {
   pending?: boolean
   error?: string | null
   onSubmit: (values: MemberFormValues) => void
+  // 현장 마스터가 여는 경우. 역할·메뉴 권한·마스터 지정은 고정이고, sites/mailSites에는 마스터 본인 현장만 넘어온다.
+  siteMasterMode?: boolean
 }
 
 const EMPTY_VALUES: MemberFormValues = {
@@ -37,6 +40,7 @@ const EMPTY_VALUES: MemberFormValues = {
   menuPermission: "limited",
   siteId: null,
   mailSiteId: null,
+  isSiteMaster: false,
 }
 
 function toFormValues(member: Member, mailSiteIds: number[]): MemberFormValues {
@@ -49,6 +53,7 @@ function toFormValues(member: Member, mailSiteIds: number[]): MemberFormValues {
     menuPermission: member.menuPermission,
     siteId: member.siteId,
     mailSiteId: mailSiteIds[0] ?? null,
+    isSiteMaster: member.isSiteMaster,
   }
 }
 
@@ -62,13 +67,18 @@ export function MemberFormModal({
   pending,
   error,
   onSubmit,
+  siteMasterMode = false,
 }: MemberFormModalProps) {
   const [values, setValues] = useState<MemberFormValues>(EMPTY_VALUES)
   const isEdit = editingMember !== null
 
   useEffect(() => {
     if (!open) return
-    setValues(editingMember ? toFormValues(editingMember, editingMemberMailSiteIds) : EMPTY_VALUES)
+    // 현장 마스터는 고를 수 있는 현장이 본인 현장뿐이라 신규 생성 시 미리 채워 둔다.
+    const initial = siteMasterMode
+      ? { ...EMPTY_VALUES, siteId: sites[0]?.id ?? null, mailSiteId: mailSites[0]?.id ?? null }
+      : EMPTY_VALUES
+    setValues(editingMember ? toFormValues(editingMember, editingMemberMailSiteIds) : initial)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 모달을 열 때 한 번만 초기화한다.
   }, [open, editingMember])
 
@@ -79,10 +89,14 @@ export function MemberFormModal({
       menuPermission: role === "manager" ? "all" : "limited",
       siteId: role === "manager" ? null : prev.siteId,
       mailSiteId: role === "manager" ? null : prev.mailSiteId,
+      isSiteMaster: role === "manager" ? false : prev.isSiteMaster,
     }))
   }
 
-  const canSubmit = values.name.trim() !== "" && values.email.trim() !== "" && (values.role === "manager" || values.siteId !== null || values.mailSiteId !== null)
+  const canSubmit =
+    values.name.trim() !== "" &&
+    values.email.trim() !== "" &&
+    (values.role === "manager" || values.siteId !== null || values.mailSiteId !== null || (siteMasterMode && isEdit))
 
   function submit() {
     if (!canSubmit) return
@@ -137,20 +151,22 @@ export function MemberFormModal({
           </Field>
         </div>
 
-        <Field label="역할" htmlFor="member-role" required>
-          <Select
-            id="member-role"
-            value={values.role}
-            onChange={(e) => updateRole(e.target.value as CreatableMemberRole)}
-            className="w-full"
-          >
-            {CREATABLE_MEMBER_ROLE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {siteMasterMode ? null : (
+          <Field label="역할" htmlFor="member-role" required>
+            <Select
+              id="member-role"
+              value={values.role}
+              onChange={(e) => updateRole(e.target.value as CreatableMemberRole)}
+              className="w-full"
+            >
+              {CREATABLE_MEMBER_ROLE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="직위 (선택)" htmlFor="member-position">
@@ -171,7 +187,11 @@ export function MemberFormModal({
           </Field>
         </div>
 
-        {values.role === "member" ? (
+        {siteMasterMode && isEdit ? (
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+            소속 현장 변경은 본사관리자에게 요청하세요.
+          </p>
+        ) : values.role === "member" ? (
           <div className="space-y-2">
             <p className="text-sm font-medium">
               소속 현장 <span className="text-danger">*</span>
@@ -209,8 +229,25 @@ export function MemberFormModal({
               </Field>
             </div>
             <p className="text-xs text-muted-foreground">
-              두 메뉴의 현장 목록은 따로 관리됩니다. 하나 이상 고르세요. 한 현장에 담당자를 여러 명 둘 수 있습니다.
+              {siteMasterMode
+                ? "현장 마스터는 본인이 맡은 현장에만 계정을 만들 수 있습니다."
+                : "두 메뉴의 현장 목록은 따로 관리됩니다. 하나 이상 고르세요. 한 현장에 담당자를 여러 명 둘 수 있습니다."}
             </p>
+            {siteMasterMode ? null : (
+              <label className="flex items-start gap-2 rounded-md border border-border px-3 py-2">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={values.isSiteMaster}
+                  onChange={(e) => setValues((prev) => ({ ...prev, isSiteMaster: e.target.checked }))}
+                />
+                <span>
+                  <span className="block text-sm font-medium">현장 마스터로 지정</span>
+                  <span className="block text-xs text-muted-foreground">
+                    지정하면 이 계정이 같은 현장의 현장관리자 계정을 직접 생성·수정·삭제할 수 있습니다.
+                  </span>
+                </span>
+              </label>
+            )}
           </div>
         ) : (
           <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
@@ -218,20 +255,22 @@ export function MemberFormModal({
           </p>
         )}
 
-        <Field label="메뉴 권한" htmlFor="member-menu-permission" required>
-          <Select
-            id="member-menu-permission"
-            value={values.menuPermission}
-            onChange={(e) => setValues((prev) => ({ ...prev, menuPermission: e.target.value as MenuPermission }))}
-            className="w-full"
-          >
-            {(Object.entries(MENU_PERMISSION_LABEL) as [MenuPermission, string][]).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {siteMasterMode ? null : (
+          <Field label="메뉴 권한" htmlFor="member-menu-permission" required>
+            <Select
+              id="member-menu-permission"
+              value={values.menuPermission}
+              onChange={(e) => setValues((prev) => ({ ...prev, menuPermission: e.target.value as MenuPermission }))}
+              className="w-full"
+            >
+              {(Object.entries(MENU_PERMISSION_LABEL) as [MenuPermission, string][]).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
       </div>
     </Modal>
   )

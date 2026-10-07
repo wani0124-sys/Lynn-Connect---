@@ -418,6 +418,7 @@ Columns:
   password_hash text -- salt:hash(scrypt, node:crypto). 평문 비밀번호는 저장하지 않는다.
   joined_at date
   must_change_password boolean (기본 true)
+  is_site_master boolean (기본 false) -- 현장 마스터. true인 현장(member) 계정은 자기 현장 일반 계정을 생성·수정·삭제할 수 있다(2026-10-06)
   created_at timestamptz
   updated_at timestamptz
 Primary key: id
@@ -428,7 +429,7 @@ RLS policies: RLS enabled. members_no_direct_access(전체 거부, anon/authenti
 RPC/functions: strip_deleted_site_from_managed_sites() + trigger sites_cleanup_managed_site_ids(sites AFTER 아님 BEFORE DELETE) — 현장 삭제 시 모든 멤버의 managed_site_ids 배열에서 해당 site_id를 제거한다(FK로 표현할 수 없는 배열 컬럼의 고아 참조 방지).
 Related APIs: apps/web/app/routes/members.tsx (loader/action, intent=member.*), apps/web/app/routes/login.tsx, apps/web/app/routes/change-password.tsx — apps/web/app/features/members/model/members.repository.server.ts를 직접 호출
 Related frontend screens: /members (멤버 관리 + 관리 현장 권한 탭), /login, /change-password
-Migration file: supabase/migrations/20260715005123_add_members_table.sql
+Migration file: supabase/migrations/20260715005123_add_members_table.sql, supabase/migrations/20261006090000_add_member_site_master.sql
 Notes:
   - Duplicated data: managed_site_ids(bigint[])는 sites.id를 정규화된 join table 없이 배열로 보관한다.
   - Source of truth: 각 site_id 값의 존재 여부는 sites 테이블.
@@ -647,22 +648,24 @@ Purpose: 현장 메일함(/site-mails) 전용 구분자(2026-10-02 사용자 요
 Columns:
   id bigint (identity, by default)
   site_id bigint not null (FK, on delete cascade) -- 소속 메일함 현장
+  parent_id bigint null (FK, on delete cascade) -- 상위 구분자. null이면 1단계. 최대 3단계(2026-10-07 추가)
   name text
   color text (default '#6b7280')
   sort_order int
   created_at timestamptz
 Primary key: id
-Foreign keys: site_id -> site_mail_sites(id) on delete cascade
-Indexes: site_mail_categories_site_id_idx
-Unique constraints: site_mail_categories_site_name_key (site_id, name) — 같은 이름도 현장이 다르면 따로 만들 수 있다
+Foreign keys: site_id -> site_mail_sites(id) on delete cascade, parent_id -> site_mail_categories(id) on delete cascade
+Indexes: site_mail_categories_site_id_idx, site_mail_categories_parent_id_idx
+Unique constraints: (2026-10-07부터) site_mail_categories_root_name_key (site_id, name) where parent_id is null, site_mail_categories_child_name_key (parent_id, name) where parent_id is not null — 같은 상위 구분자 안에서만 이름 중복을 막는다(공사 → 건축, 공무 → 건축 둘 다 가능). 이전에는 site_mail_categories_site_name_key (site_id, name)
 RLS policies: RLS enabled. site_mail_categories_no_direct_access(전체 거부, anon/authenticated).
 RPC/functions: 없음
 Related APIs: apps/web/app/routes/site-mails.tsx (intent=category.*, { siteId } 필수, requireSiteMailWriteAccess — 본사 또는 그 현장 담당자) — features/site-mails/model/site-mail-categories.repository.server.ts
 Related frontend screens: /site-mails (구분자 탭 + 구분자 관리 팝업), /site-mails/new, /site-mails/:postId
-Migration file: supabase/migrations/20261002090000_separate_site_mail_categories.sql, supabase/migrations/20261002120000_site_mail_categories_per_site.sql(site_id 추가)
+Migration file: supabase/migrations/20261002090000_separate_site_mail_categories.sql, supabase/migrations/20261002120000_site_mail_categories_per_site.sql(site_id 추가), supabase/migrations/20261007090000_site_mail_categories_hierarchy.sql(parent_id 추가, 3단계)
 Notes:
   - 마이그레이션 시점의 standard_categories 행을 같은 id로 복사해 기존 site_mail_posts.category_id가 그대로 유효하도록 했다. 복사 이후 두 목록은 완전히 독립적이다.
   - 삭제 시 해당 구분자의 메일은 category_id=NULL로 정리한다.
   - 20261002120000에서 당시 공유 목록을 현장마다 한 벌씩 복사하고 메일의 category_id를 같은 현장·같은 이름 복사본으로 옮겼다. 이후 새로 만든 현장은 빈 목록으로 시작한다.
   - 메일의 category_id가 같은 현장 소속인지는 DB 제약이 아니라 앱(assertSiteMailCategory, 업로드 시 현장 구분자 집합 검사)에서 보장한다. 수정·삭제·순서 변경 쿼리도 모두 site_id로 좁힌다.
+  - (2026-10-07) 3단계 구분자: 메일은 어느 단계에든 붙일 수 있다. 목록에서 상위 구분자로 거르면 하위 구분자 메일까지 함께 보인다(listSiteMailPosts가 하위 id까지 in 조건). 3단계 제한·상위 구분자가 같은 현장인지는 앱(createSiteMailCategory)에서 검사한다. 구분자를 지우면 하위 구분자도 cascade로 지워지고, 그 구분자들에 붙은 메일은 category_id=NULL이 된다. sort_order는 같은 상위 구분자 안에서의 순서다.
 ```

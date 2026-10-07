@@ -9,6 +9,7 @@ import {
   type LoaderFunctionArgs,
 } from "react-router"
 import { Check, Download, ExternalLink, List, Paperclip, Pencil, Trash2, Upload, X } from "lucide-react"
+import { flattenCategoryOptions, getCategoryPathLabel } from "~/entities/site-mail/lib/category-tree"
 import { CategoryBadge } from "~/entities/task-standard/ui/category-badge"
 import { requireUser } from "~/features/auth/model/session.server"
 import { canViewSiteMail, canWriteSiteMail, requireSiteMailWriteAccess } from "~/features/site-mails/model/site-mail-access.server"
@@ -182,7 +183,7 @@ export default function SiteMailsDetailRoute() {
     )
   }
 
-  const sortedCategories = [...categories].sort((a, b) => a.sortOrder - b.sortOrder)
+  const categoryOptions = flattenCategoryOptions(categories)
   const currentCategory = post.categoryId ? (categories.find((c) => c.id === post.categoryId) ?? null) : null
   const actionError =
     (metaFetcher.data && "error" in metaFetcher.data && metaFetcher.data.error) ||
@@ -374,9 +375,9 @@ export default function SiteMailsDetailRoute() {
                   aria-label="구분자"
                 >
                   <option value="">구분자 없음</option>
-                  {sortedCategories.map((cat) => (
+                  {categoryOptions.map((cat) => (
                     <option key={cat.id} value={cat.id}>
-                      {cat.name}
+                      {cat.label}
                     </option>
                   ))}
                 </Select>
@@ -397,7 +398,7 @@ export default function SiteMailsDetailRoute() {
             ) : (
               <div className="flex items-center gap-2">
                 {currentCategory ? (
-                  <CategoryBadge name={currentCategory.name} color={currentCategory.color} />
+                  <CategoryBadge name={getCategoryPathLabel(categories, currentCategory.id) ?? currentCategory.name} color={currentCategory.color} />
                 ) : (
                   <span className="text-sm text-muted-foreground">구분자 없음</span>
                 )}

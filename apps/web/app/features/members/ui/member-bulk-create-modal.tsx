@@ -21,6 +21,8 @@ export interface MemberBulkCreateModalProps {
   pending?: boolean
   error?: string | null
   onSubmit: (rows: BulkCreateRow[], role: CreatableMemberRole, siteId: number | null, mailSiteId: number | null) => void
+  // 현장 마스터가 여는 경우. 역할은 현장관리자로 고정이고, sites/mailSites에는 마스터 본인 현장만 넘어온다.
+  siteMasterMode?: boolean
 }
 
 function parseRows(raw: string): BulkCreateRow[] {
@@ -35,7 +37,16 @@ function parseRows(raw: string): BulkCreateRow[] {
     .filter((row) => row.name !== "" && row.email !== "")
 }
 
-export function MemberBulkCreateModal({ open, onClose, sites, mailSites, pending, error, onSubmit }: MemberBulkCreateModalProps) {
+export function MemberBulkCreateModal({
+  open,
+  onClose,
+  sites,
+  mailSites,
+  pending,
+  error,
+  onSubmit,
+  siteMasterMode = false,
+}: MemberBulkCreateModalProps) {
   const [role, setRole] = useState<CreatableMemberRole>("member")
   const [siteId, setSiteId] = useState<number | null>(null)
   const [mailSiteId, setMailSiteId] = useState<number | null>(null)
@@ -44,9 +55,10 @@ export function MemberBulkCreateModal({ open, onClose, sites, mailSites, pending
   useEffect(() => {
     if (!open) return
     setRole("member")
-    setSiteId(null)
-    setMailSiteId(null)
+    setSiteId(siteMasterMode ? (sites[0]?.id ?? null) : null)
+    setMailSiteId(siteMasterMode ? (mailSites[0]?.id ?? null) : null)
     setRaw("")
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 모달을 열 때 한 번만 초기화한다.
   }, [open])
 
   const rows = parseRows(raw)
@@ -83,24 +95,26 @@ export function MemberBulkCreateModal({ open, onClose, sites, mailSites, pending
         </p>
 
         <div className="grid grid-cols-2 gap-4">
-          <Field label="역할" htmlFor="bulk-role" required>
-            <Select
-              id="bulk-role"
-              value={role}
-              onChange={(e) => {
-                const next = e.target.value as CreatableMemberRole
-                setRole(next)
-                if (next === "manager") setSiteId(null)
-              }}
-              className="w-full"
-            >
-              {CREATABLE_MEMBER_ROLE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {siteMasterMode ? null : (
+            <Field label="역할" htmlFor="bulk-role" required>
+              <Select
+                id="bulk-role"
+                value={role}
+                onChange={(e) => {
+                  const next = e.target.value as CreatableMemberRole
+                  setRole(next)
+                  if (next === "manager") setSiteId(null)
+                }}
+                className="w-full"
+              >
+                {CREATABLE_MEMBER_ROLE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
 
           {role === "member" ? (
             <Field label="소속 현장 · 현장별 메일함" htmlFor="bulk-mail-site" required hint="두 메뉴 중 하나 이상 선택">

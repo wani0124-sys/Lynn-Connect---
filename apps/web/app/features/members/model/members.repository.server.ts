@@ -4,7 +4,7 @@ import type { Member, MemberRole, MemberStatus, MenuPermission } from "~/entitie
 const TABLE = "members"
 
 const SELECT_COLUMNS =
-  "id, name, email, role, status, site_id, position, department, menu_permission, managed_site_ids, joined_at, must_change_password"
+  "id, name, email, role, status, site_id, position, department, menu_permission, managed_site_ids, joined_at, must_change_password, is_site_master"
 
 interface MemberRow {
   id: string
@@ -19,6 +19,7 @@ interface MemberRow {
   managed_site_ids: number[] | null
   joined_at: string
   must_change_password: boolean
+  is_site_master: boolean
 }
 
 function toMember(row: MemberRow): Member {
@@ -35,6 +36,7 @@ function toMember(row: MemberRow): Member {
     managedSiteIds: row.managed_site_ids,
     joinedAt: row.joined_at,
     mustChangePassword: row.must_change_password,
+    isSiteMaster: row.is_site_master,
   }
 }
 
@@ -76,6 +78,7 @@ interface CreateMemberInput {
   passwordHash: string
   joinedAt: string
   mustChangePassword: boolean
+  isSiteMaster: boolean
 }
 
 export async function createMember(input: CreateMemberInput): Promise<Member> {
@@ -94,6 +97,7 @@ export async function createMember(input: CreateMemberInput): Promise<Member> {
       password_hash: input.passwordHash,
       joined_at: input.joinedAt,
       must_change_password: input.mustChangePassword,
+      is_site_master: input.isSiteMaster,
     })
     .select(SELECT_COLUMNS)
     .single()
@@ -118,6 +122,7 @@ export async function updateMember(id: string, patch: Partial<Omit<Member, "id">
   if (patch.managedSiteIds !== undefined) update.managed_site_ids = patch.managedSiteIds
   if (patch.joinedAt !== undefined) update.joined_at = patch.joinedAt
   if (patch.mustChangePassword !== undefined) update.must_change_password = patch.mustChangePassword
+  if (patch.isSiteMaster !== undefined) update.is_site_master = patch.isSiteMaster
 
   const { data, error } = await getSupabaseServerClient()
     .from(TABLE)

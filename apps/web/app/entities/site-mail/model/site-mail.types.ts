@@ -7,6 +7,18 @@ export type SiteMailSite = {
   writerMemberIds: string[]
 }
 
+// 현장 메일함 구분자. 본사 구분자(StandardCategory)와 같은 모양에 상위 구분자(parentId)가 더해져 최대 3단계로 나뉜다.
+// parentId가 null이면 1단계 구분자다. sortOrder는 같은 상위 구분자 안에서의 순서다.
+export type SiteMailCategory = {
+  id: number
+  name: string
+  color: string
+  sortOrder: number
+  parentId: number | null
+}
+
+export const SITE_MAIL_CATEGORY_MAX_DEPTH = 3
+
 export type SiteMailAttachment = {
   id: string
   filename: string
@@ -36,6 +48,8 @@ export type SiteMailPostListItem = Pick<
 > & {
   categoryName: string | null
   categoryColor: string | null
+  // "공사 › 건축 › 설계"처럼 1단계부터 이어 붙인 이름(1단계 구분자면 categoryName과 같다).
+  categoryPath: string | null
   attachmentCount: number
 }
 

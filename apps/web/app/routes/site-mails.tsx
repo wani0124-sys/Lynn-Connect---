@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react"
 import { Link, data, useFetcher, useLoaderData, useSearchParams, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
-import { Plus, Search, Settings2 } from "lucide-react"
+import { CornerDownRight, Plus, Search, Settings2 } from "lucide-react"
 import { isHeadquarters } from "~/entities/member/model/member"
 import { usePageMenuTitle } from "~/entities/sidebar-menu/lib/use-page-menu-title"
 import { CategoryBadge } from "~/entities/task-standard/ui/category-badge"
-import type { SiteMailPostSort } from "~/entities/site-mail/model/site-mail.types"
+import { getCategoryAncestry, getChildCategories } from "~/entities/site-mail/lib/category-tree"
+import type { SiteMailCategory, SiteMailPostSort } from "~/entities/site-mail/model/site-mail.types"
 import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
 import { listMembers } from "~/features/members/model/members.repository.server"
 import { canViewSiteMail, canWriteSiteMail, requireSiteMailWriteAccess } from "~/features/site-mails/model/site-mail-access.server"
@@ -30,9 +31,9 @@ import {
   listSiteMailPosts,
 } from "~/features/site-mails/model/site-mails.repository.server"
 import { SiteMailBulkActionBar } from "~/features/site-mails/ui/bulk-action-bar"
+import { SiteMailCategoryManageModal } from "~/features/site-mails/ui/category-manage-modal"
 import { SiteMailSiteManageModal } from "~/features/site-mails/ui/site-manage-modal"
 import { SiteMailUploadModal } from "~/features/site-mails/ui/upload-modal"
-import { CategoryManageModal } from "~/features/task-standards/ui/category-manage-modal"
 import { validateSiteName } from "~/features/sites/model/sites.schema"
 import { formatDate } from "~/shared/lib/format"
 import { Button } from "~/shared/ui/button"
@@ -134,11 +135,17 @@ export async function action({ request }: ActionFunctionArgs) {
         return { ok: true }
       }
       // 메일함 현장별 구분자(site_mail_categories.site_id). 부서별 업무기준·다른 현장의 구분자와 연동되지 않는다.
-      // 그 현장에 쓸 수 있는 계정(본사 또는 담당자)이 자기 현장 구분자를 직접 관리한다.
+      // 그 현장에 쓸 수 있는 계정(본사 또는 담당자)이 자기 현장 구분자를 직접 관리한다. parentId가 있으면 하위 구분자(최대 3단계).
       case "category.create": {
         const siteId = Number(form.get("siteId"))
         await requireSiteMailWriteAccess(request, siteId)
-        await createSiteMailCategory(siteId, String(form.get("name") ?? ""), String(form.get("color") ?? "#6b7280"))
+        const parentIdRaw = String(form.get("parentId") ?? "")
+        await createSiteMailCategory(
+          siteId,
+          String(form.get("name") ?? ""),
+          String(form.get("color") ?? "#6b7280"),
+          parentIdRaw ? Number(parentIdRaw) : null,
+        )
         return { ok: true }
       }
       case "category.rename": {
@@ -226,21 +233,35 @@ export default function SiteMailsRoute() {
     setQInput("")
   }
 
-  const catTabs = [
-    { value: "", label: "전체" },
-    { value: "null", label: "없음" },
-    ...[...categories]
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((cat) => ({
-        value: String(cat.id),
-        label: (
-          <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block size-2 rounded-full" style={{ backgroundColor: cat.color }} aria-hidden />
-            {cat.name}
-          </span>
-        ),
-      })),
+  function toCatTab(cat: SiteMailCategory) {
+    return {
+      value: String(cat.id),
+      label: (
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block size-2 rounded-full" style={{ backgroundColor: cat.color }} aria-hidden />
+          {cat.name}
+        </span>
+      ),
+    }
+  }
+
+  // 구분자 탭은 최대 3줄. 1단계를 고르면 그 아래 2단계 줄이, 2단계를 고르면 3단계 줄이 나온다.
+  // 아래 줄의 "전체"는 바로 위에서 고른 구분자(하위 포함) 그대로 보기다.
+  const selectedCatPath = /^\d+$/.test(selectedCatParam) ? getCategoryAncestry(categories, Number(selectedCatParam)) : []
+  const catTabRows = [
+    {
+      items: [{ value: "", label: "전체" }, { value: "null", label: "없음" }, ...getChildCategories(categories, null).map(toCatTab)],
+      value: selectedCatParam === "null" ? "null" : selectedCatPath[0] ? String(selectedCatPath[0].id) : "",
+    },
   ]
+  for (const [index, parent] of selectedCatPath.entries()) {
+    const children = getChildCategories(categories, parent.id)
+    if (!children.length) break
+    catTabRows.push({
+      items: [{ value: String(parent.id), label: "전체" }, ...children.map(toCatTab)],
+      value: String(selectedCatPath[index + 1]?.id ?? parent.id),
+    })
+  }
 
   const actionError =
     [catFetcher.data, bulkFetcher.data, siteFetcher.data].find(
@@ -305,8 +326,15 @@ export default function SiteMailsRoute() {
             </Card>
           ) : (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Tabs items={catTabs} value={selectedCatParam} onChange={(value) => updateParams({ cat: value || null })} />
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="flex flex-col gap-2">
+                  {catTabRows.map((row, depth) => (
+                    <div key={depth} className="flex items-center gap-1.5" style={{ paddingLeft: depth ? `${(depth - 1) * 1.5}rem` : undefined }}>
+                      {depth ? <CornerDownRight className="size-4 shrink-0 text-muted-foreground" aria-hidden /> : null}
+                      <Tabs items={row.items} value={row.value} onChange={(value) => updateParams({ cat: value || null })} />
+                    </div>
+                  ))}
+                </div>
                 {canWrite ? (
                   <Button variant="outline" onClick={() => setCatModalOpen(true)}>
                     <Settings2 className="size-4" aria-hidden />
@@ -358,7 +386,7 @@ export default function SiteMailsRoute() {
                     <Table className="table-fixed">
                       <colgroup>
                         {canWrite ? <col className="w-10" /> : null}
-                        <col className="w-24" />
+                        <col className="w-28" />
                         <col />
                         <col className="w-40" />
                         <col className="w-24" />
@@ -390,7 +418,7 @@ export default function SiteMailsRoute() {
                                 <Checkbox checked={selectedIds.has(post.id)} onChange={() => toggleOne(post.id)} aria-label="선택" />
                               </TD>
                             ) : null}
-                            <TD className="whitespace-nowrap">
+                            <TD className="whitespace-nowrap" title={post.categoryPath ?? undefined}>
                               {post.categoryName ? <CategoryBadge name={post.categoryName} color={post.categoryColor ?? "#6b7280"} /> : null}
                             </TD>
                             <TD className="truncate">
@@ -506,12 +534,17 @@ export default function SiteMailsRoute() {
       ) : null}
 
       {canWrite && selectedSite ? (
-        <CategoryManageModal
+        <SiteMailCategoryManageModal
           open={catModalOpen}
           onClose={() => setCatModalOpen(false)}
           categories={categories}
           pending={catFetcher.state !== "idle"}
-          onCreate={(name, color) => catFetcher.submit({ intent: "category.create", siteId: String(selectedSite.id), name, color }, { method: "post" })}
+          onCreate={(name, color, parentId) =>
+            catFetcher.submit(
+              { intent: "category.create", siteId: String(selectedSite.id), name, color, parentId: parentId === null ? "" : String(parentId) },
+              { method: "post" },
+            )
+          }
           onRename={(id, name, color) =>
             catFetcher.submit({ intent: "category.rename", siteId: String(selectedSite.id), id: String(id), name, color }, { method: "post" })
           }
