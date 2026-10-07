@@ -107,8 +107,10 @@ function readSiteIds(form: FormData): { siteId: number | null; mailSiteId: numbe
 function computeManagedSiteIds(existing: Member, role: CreatableMemberRole, siteId: number | null): number[] | null {
   if (role !== "member") return null
   if (existing.managedSiteIds === null) return existing.managedSiteIds
-  if (siteId !== null && !existing.managedSiteIds.includes(siteId)) return [...existing.managedSiteIds, siteId]
-  return existing.managedSiteIds
+  // 소속 현장이 바뀌면 예전 소속 현장은 빼고 새 소속 현장을 넣는다. 예전에는 덧붙이기만 해서
+  // 다른 현장으로 옮긴 계정의 관리 현장 열에 예전 현장이 계속 남았다(2026-10-06 박찬훈 계정).
+  const kept = existing.managedSiteIds.filter((id) => id !== existing.siteId)
+  return siteId !== null && !kept.includes(siteId) ? [...kept, siteId] : kept
 }
 
 // 현장 마스터 요청이면 고른 현장이 마스터 본인 현장인지 확인한다. 아니면 오류 메시지를 돌려준다.

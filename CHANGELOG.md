@@ -22,6 +22,7 @@
 - **현장 마스터** (`/members`) — 본사관리자가 계정 생성·수정 화면에서 현장관리자 계정을 "현장 마스터"로 지정할 수 있음. 현장 마스터는 본인 현장(대외기관 점검 소속 현장 또는 담당 메일함 현장)에 현장관리자 계정을 직접 생성·일괄 생성하고, 같은 현장 일반 계정의 이름·직위·부서 수정과 삭제를 할 수 있음. 본사 계정·다른 마스터·소속 현장 변경·관리 현장 권한은 본사만 가능. DB: `supabase/migrations/20261006090000_add_member_site_master.sql`(`members.is_site_master` 추가, 기본 false).
 
 ### 수정
+- **소속 현장을 옮긴 계정의 관리 현장에 예전 현장이 남던 문제** (`/members`) — 계정 수정에서 대외기관 점검 소속 현장을 바꾸면 예전 소속 현장은 관리 현장에서 빼고 새 소속 현장을 넣음(전에는 덧붙이기만 함).
 - **메일 본문 링크가 열리지 않던 문제** (`/standards`, `/site-mails` 상세) — 본문 iframe이 `sandbox=""`로 새 탭까지 막고 있어 `<base target="_blank">`를 넣고 `allow-popups`만 허용(스크립트는 계속 차단).
 - **Render 첫 배포 실패 수정** — 빌드 명령의 `corepack enable`이 Render의 읽기 전용 `/usr/bin` 때문에 `EROFS`로 실패해, `render.yaml`의 build/start 명령을 `corepack pnpm …`으로 바꾸고 `COREPACK_ENABLE_DOWNLOAD_PROMPT=0`을 추가. `.agents/DEPLOYMENT.md` 0장 갱신.
 
