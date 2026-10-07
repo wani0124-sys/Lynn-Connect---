@@ -151,7 +151,15 @@ export async function action({ request }: ActionFunctionArgs) {
       case "category.rename": {
         const siteId = Number(form.get("siteId"))
         await requireSiteMailWriteAccess(request, siteId)
-        await renameSiteMailCategory(siteId, Number(form.get("id")), String(form.get("name") ?? ""), String(form.get("color") ?? "#6b7280"))
+        // parentId가 오면 상위 구분자도 바꾼다("" = 1단계로). 안 오면 이름·색만 바꾼다.
+        const parentIdRaw = form.get("parentId")
+        await renameSiteMailCategory(
+          siteId,
+          Number(form.get("id")),
+          String(form.get("name") ?? ""),
+          String(form.get("color") ?? "#6b7280"),
+          parentIdRaw === null ? undefined : parentIdRaw ? Number(parentIdRaw) : null,
+        )
         return { ok: true }
       }
       case "category.delete": {
@@ -545,8 +553,18 @@ export default function SiteMailsRoute() {
               { method: "post" },
             )
           }
-          onRename={(id, name, color) =>
-            catFetcher.submit({ intent: "category.rename", siteId: String(selectedSite.id), id: String(id), name, color }, { method: "post" })
+          onRename={(id, name, color, parentId) =>
+            catFetcher.submit(
+              {
+                intent: "category.rename",
+                siteId: String(selectedSite.id),
+                id: String(id),
+                name,
+                color,
+                parentId: parentId === null ? "" : String(parentId),
+              },
+              { method: "post" },
+            )
           }
           onDelete={(id) => catFetcher.submit({ intent: "category.delete", siteId: String(selectedSite.id), id: String(id) }, { method: "post" })}
           onReorder={(items) => {

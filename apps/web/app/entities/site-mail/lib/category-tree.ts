@@ -1,4 +1,4 @@
-import type { SiteMailCategory } from "~/entities/site-mail/model/site-mail.types"
+import { SITE_MAIL_CATEGORY_MAX_DEPTH, type SiteMailCategory } from "~/entities/site-mail/model/site-mail.types"
 
 // 현장 메일함 구분자(최대 3단계)를 다루는 순수 함수 모음. 서버(필터·검증)와 화면(탭·선택 목록)이 함께 쓴다.
 
@@ -43,6 +43,22 @@ export function getCategoryWithDescendantIds(categories: SiteMailCategory[], id:
     for (const cat of categories) if (cat.parentId === result[i]) result.push(cat.id)
   }
   return result
+}
+
+// 자기 자신부터 가장 깊은 하위 구분자까지의 단계 수(하위가 없으면 1).
+export function getCategorySubtreeHeight(categories: SiteMailCategory[], id: number): number {
+  const children = categories.filter((cat) => cat.parentId === id)
+  return 1 + Math.max(0, ...children.map((child) => getCategorySubtreeHeight(categories, child.id)))
+}
+
+// 구분자를 옮길 수 있는 상위 구분자 후보. 자기 자신·자기 하위로는 못 옮기고,
+// 옮긴 뒤 하위 구분자까지 포함해 3단계를 넘으면 후보에서 뺀다.
+export function getMovableParentOptions(categories: SiteMailCategory[], id: number): { id: number; label: string }[] {
+  const blocked = new Set(getCategoryWithDescendantIds(categories, id))
+  const height = getCategorySubtreeHeight(categories, id)
+  return flattenCategoryOptions(categories).filter(
+    (option) => !blocked.has(option.id) && option.depth + height <= SITE_MAIL_CATEGORY_MAX_DEPTH,
+  )
 }
 
 // 선택 목록(select)용: 나무 순서(공사, 공사 › 건축, 공사 › 건축 › 설계, 공무 …)로 펼친 목록.

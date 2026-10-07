@@ -667,5 +667,5 @@ Notes:
   - 삭제 시 해당 구분자의 메일은 category_id=NULL로 정리한다.
   - 20261002120000에서 당시 공유 목록을 현장마다 한 벌씩 복사하고 메일의 category_id를 같은 현장·같은 이름 복사본으로 옮겼다. 이후 새로 만든 현장은 빈 목록으로 시작한다.
   - 메일의 category_id가 같은 현장 소속인지는 DB 제약이 아니라 앱(assertSiteMailCategory, 업로드 시 현장 구분자 집합 검사)에서 보장한다. 수정·삭제·순서 변경 쿼리도 모두 site_id로 좁힌다.
-  - (2026-10-07) 3단계 구분자: 메일은 어느 단계에든 붙일 수 있다. 목록에서 상위 구분자로 거르면 하위 구분자 메일까지 함께 보인다(listSiteMailPosts가 하위 id까지 in 조건). 3단계 제한·상위 구분자가 같은 현장인지는 앱(createSiteMailCategory)에서 검사한다. 구분자를 지우면 하위 구분자도 cascade로 지워지고, 그 구분자들에 붙은 메일은 category_id=NULL이 된다. sort_order는 같은 상위 구분자 안에서의 순서다.
+  - (2026-10-07) 3단계 구분자: 메일은 어느 단계에든 붙일 수 있다. 목록에서 상위 구분자로 거르면 하위 구분자 메일까지 함께 보인다(listSiteMailPosts가 하위 id까지 in 조건). 3단계 제한·상위 구분자가 같은 현장인지는 앱(createSiteMailCategory)에서 검사한다. 구분자를 지우면 하위 구분자도 cascade로 지워지고, 그 구분자들에 붙은 메일은 category_id=NULL이 된다. sort_order는 같은 상위 구분자 안에서의 순서다. 상위 구분자 변경(이동)은 renameSiteMailCategory가 parent_id를 바꾸며, 자기 하위로의 이동과 이동 후 3단계 초과를 앱에서 막는다(옮긴 구분자는 새 위치 맨 뒤 sort_order).
 ```

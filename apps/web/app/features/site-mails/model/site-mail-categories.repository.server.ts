@@ -1,5 +1,5 @@
 import { getSupabaseServerClient } from "~/shared/lib/supabase.server"
-import { getCategoryDepth, getCategoryWithDescendantIds } from "~/entities/site-mail/lib/category-tree"
+import { getCategoryDepth, getCategoryWithDescendantIds, getMovableParentOptions } from "~/entities/site-mail/lib/category-tree"
 import { SITE_MAIL_CATEGORY_MAX_DEPTH, type SiteMailCategory } from "~/entities/site-mail/model/site-mail.types"
 
 // 현장 메일함 전용 구분자 목록. 부서별 업무기준(standard_categories)과 분리돼 있고(20261002090000),
@@ -97,15 +97,35 @@ export async function createSiteMailCategory(
   }
 }
 
-export async function renameSiteMailCategory(siteId: number, id: number, name: string, color: string): Promise<void> {
-  const { error } = await getSupabaseServerClient()
-    .from(TABLE_CATEGORIES)
-    .update({ name: name.trim(), color })
-    .eq("id", id)
-    .eq("site_id", siteId)
+// parentId를 넘기면(undefined가 아니면) 상위 구분자도 바꾼다(null이면 1단계로). 하위 구분자는 함께 따라간다.
+// 자기 자신·자기 하위 아래로는 옮길 수 없고, 옮긴 뒤 3단계를 넘으면 막는다. 옮긴 구분자는 새 위치의 맨 뒤에 놓인다.
+export async function renameSiteMailCategory(
+  siteId: number,
+  id: number,
+  name: string,
+  color: string,
+  parentId?: number | null,
+): Promise<void> {
+  const updates: Record<string, unknown> = { name: name.trim(), color }
+
+  if (parentId !== undefined) {
+    const categories = await listSiteMailCategories(siteId)
+    const current = categories.find((cat) => cat.id === id)
+    if (!current) throw new Error("이 현장의 구분자가 아닙니다.")
+    if (current.parentId !== parentId) {
+      if (parentId !== null && !getMovableParentOptions(categories, id).some((option) => option.id === parentId)) {
+        throw new Error(`그 위치로는 옮길 수 없습니다(자기 하위로 옮기거나 ${SITE_MAIL_CATEGORY_MAX_DEPTH}단계를 넘는 경우).`)
+      }
+      const siblings = categories.filter((cat) => cat.parentId === parentId)
+      updates.parent_id = parentId
+      updates.sort_order = Math.max(0, ...siblings.map((cat) => cat.sortOrder)) + 10
+    }
+  }
+
+  const { error } = await getSupabaseServerClient().from(TABLE_CATEGORIES).update(updates).eq("id", id).eq("site_id", siteId)
 
   if (error) {
-    if (error.code === "23505") throw new Error("이미 존재하는 구분자입니다.")
+    if (error.code === "23505") throw new Error("같은 위치에 이미 같은 이름의 구분자가 있습니다.")
     throw new Error(`구분자를 수정하지 못했습니다: ${error.message}`)
   }
 }
