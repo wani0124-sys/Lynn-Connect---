@@ -45,11 +45,17 @@ const SORT_OPTIONS: { value: StandardPostSort; label: string }[] = [
   { value: "created_asc", label: "등록일 오래된순" },
 ]
 
+function readFilterParam(params: URLSearchParams, key: string): string | undefined {
+  const value = params.get(key)
+  return value && value !== "null" ? value : undefined
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireUser(request)
   const url = new URL(request.url)
-  const departmentId = url.searchParams.get("dept") ?? undefined
-  const categoryId = url.searchParams.get("cat") ?? undefined
+  // "없음" 탭은 2026-10-07 사용자 요청으로 뺐다("전체"에 함께 보임). 예전 주소의 =null은 "전체"로 취급한다.
+  const departmentId = readFilterParam(url.searchParams, "dept")
+  const categoryId = readFilterParam(url.searchParams, "cat")
   const search = url.searchParams.get("q") ?? undefined
   const sort = (url.searchParams.get("sort") as StandardPostSort | null) ?? "sent_desc"
   const page = Number(url.searchParams.get("page") ?? "1") || 1
@@ -147,8 +153,8 @@ export default function StandardsRoute() {
     setSelectedIds(new Set())
   }, [postList])
 
-  const selectedDeptParam = searchParams.get("dept") ?? ""
-  const selectedCatParam = searchParams.get("cat") ?? ""
+  const selectedDeptParam = readFilterParam(searchParams, "dept") ?? ""
+  const selectedCatParam = readFilterParam(searchParams, "cat") ?? ""
   const sort = (searchParams.get("sort") as StandardPostSort | null) ?? "sent_desc"
   const page = Number(searchParams.get("page") ?? "1") || 1
   const totalPages = Math.max(1, Math.ceil(postList.total / postList.limit))
@@ -175,13 +181,11 @@ export default function StandardsRoute() {
 
   const deptTabs = [
     { value: "", label: "전체" },
-    { value: "null", label: "없음" },
     ...rootDepartments.map((dept) => ({ value: String(dept.id), label: dept.name })),
   ]
 
   const catTabs = [
     { value: "", label: "전체" },
-    { value: "null", label: "없음" },
     ...[...categories]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((cat) => ({
