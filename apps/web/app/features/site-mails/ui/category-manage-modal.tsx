@@ -1,12 +1,13 @@
 import { useState } from "react"
 import { CornerDownRight, Plus, Trash2 } from "lucide-react"
-import { getCategoryWithDescendantIds, getChildCategories } from "~/entities/site-mail/lib/category-tree"
+import { getCategoryWithDescendantIds, getChildCategories, getMovableParentOptions } from "~/entities/site-mail/lib/category-tree"
 import { SITE_MAIL_CATEGORY_MAX_DEPTH, type SiteMailCategory } from "~/entities/site-mail/model/site-mail.types"
 import { Button } from "~/shared/ui/button"
 import { ConfirmPanel } from "~/shared/ui/confirm-panel"
 import { Field } from "~/shared/ui/field"
 import { Input } from "~/shared/ui/input"
 import { Modal } from "~/shared/ui/modal"
+import { Select } from "~/shared/ui/select"
 import { DragHandle, SortableList } from "~/shared/ui/sortable-list"
 
 export interface SiteMailCategoryManageModalProps {
@@ -15,7 +16,8 @@ export interface SiteMailCategoryManageModalProps {
   categories: SiteMailCategory[]
   pending: boolean
   onCreate: (name: string, color: string, parentId: number | null) => void
-  onRename: (id: number, name: string, color: string) => void
+  // parentId: 상위 구분자(null이면 1단계). 바꾸지 않으면 지금 값을 그대로 넘긴다.
+  onRename: (id: number, name: string, color: string, parentId: number | null) => void
   onDelete: (id: number) => void
   onReorder: (items: { id: number; sortOrder: number }[]) => void
 }
@@ -39,6 +41,8 @@ export function SiteMailCategoryManageModal({
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingName, setEditingName] = useState("")
   const [editingColor, setEditingColor] = useState(DEFAULT_COLOR)
+  // 수정 중인 구분자의 상위 구분자("" = 1단계).
+  const [editingParent, setEditingParent] = useState("")
   // 하위 구분자 입력칸을 연 상위 구분자 id.
   const [addingParentId, setAddingParentId] = useState<number | null>(null)
   const [childName, setChildName] = useState("")
@@ -49,6 +53,7 @@ export function SiteMailCategoryManageModal({
     setEditingId(category.id)
     setEditingName(category.name)
     setEditingColor(category.color)
+    setEditingParent(category.parentId === null ? "" : String(category.parentId))
   }
 
   function startAddChild(parent: SiteMailCategory) {
@@ -73,7 +78,7 @@ export function SiteMailCategoryManageModal({
 
   function submitEdit() {
     if (editingId === null || !editingName.trim()) return
-    onRename(editingId, editingName.trim(), editingColor)
+    onRename(editingId, editingName.trim(), editingColor, editingParent ? Number(editingParent) : null)
     setEditingId(null)
   }
 
@@ -94,20 +99,39 @@ export function SiteMailCategoryManageModal({
         renderItem={(category, drag) => (
           <div>
             {editingId === category.id ? (
-              <div className="flex items-center gap-2 py-2 pr-3">
-                <input
-                  type="color"
-                  value={editingColor}
-                  onChange={(e) => setEditingColor(e.target.value)}
-                  className="h-9 w-12 rounded-md border border-input"
-                />
-                <Input value={editingName} onChange={(e) => setEditingName(e.target.value)} className="flex-1" autoFocus />
-                <Button type="button" size="sm" onClick={submitEdit} disabled={pending}>
-                  저장
-                </Button>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setEditingId(null)}>
-                  취소
-                </Button>
+              <div className="space-y-2 py-2 pr-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={editingColor}
+                    onChange={(e) => setEditingColor(e.target.value)}
+                    className="h-9 w-12 rounded-md border border-input"
+                  />
+                  <Input value={editingName} onChange={(e) => setEditingName(e.target.value)} className="flex-1" autoFocus />
+                  <Button type="button" size="sm" onClick={submitEdit} disabled={pending}>
+                    저장
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                    취소
+                  </Button>
+                </div>
+                {/* 상위 구분자를 바꾸면 하위 구분자도 함께 옮겨진다. 3단계를 넘는 위치는 목록에 나오지 않는다. */}
+                <div className="flex items-center gap-2 pl-14">
+                  <span className="shrink-0 text-xs text-muted-foreground">상위 구분자</span>
+                  <Select
+                    value={editingParent}
+                    onChange={(e) => setEditingParent(e.target.value)}
+                    className="h-8 flex-1 text-xs"
+                    aria-label="상위 구분자"
+                  >
+                    <option value="">없음 (1단계)</option>
+                    {getMovableParentOptions(categories, category.id).map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
               </div>
             ) : (
               <div className="flex items-center justify-between gap-2 py-2 pr-3">
@@ -202,7 +226,7 @@ export function SiteMailCategoryManageModal({
       open={open}
       onClose={onClose}
       title="구분자 관리"
-      description={`구분자를 ${SITE_MAIL_CATEGORY_MAX_DEPTH}단계까지 나눠 관리합니다. 이름을 누르면 수정, 드래그하면 같은 단계 안에서 순서가 바뀝니다`}
+      description={`구분자를 ${SITE_MAIL_CATEGORY_MAX_DEPTH}단계까지 나눠 관리합니다. 이름을 누르면 수정·상위 구분자 변경, 드래그하면 같은 단계 안에서 순서가 바뀝니다`}
     >
       <div className="space-y-4">
         <div className="flex items-end gap-2">
