@@ -12,4 +12,6 @@ export interface MemberFormValues {
   // 현장관리자는 둘 중 하나 이상을 골라야 한다.
   siteId: number | null
   mailSiteId: number | null
+  // 현장 마스터 지정. 본사가 현장관리자 계정에만 지정할 수 있다.
+  isSiteMaster: boolean
 }

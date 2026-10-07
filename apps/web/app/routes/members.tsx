@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { data, useFetcher, useLoaderData, useSearchParams, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
+import { data, redirect, useFetcher, useLoaderData, useSearchParams, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
 import { Pencil, Plus, Search, Trash2, UsersRound } from "lucide-react"
 import {
   MEMBER_GROUP_LABEL,
@@ -7,6 +7,7 @@ import {
   MENU_PERMISSION_LABEL,
   getMemberGroup,
   isHeadquarters,
+  isSiteMaster,
   type CreatableMemberRole,
   type Member,
   type MemberGroup,
@@ -15,7 +16,7 @@ import {
 import type { Site } from "~/entities/site/model/site.types"
 import { usePageMenuTitle } from "~/entities/sidebar-menu/lib/use-page-menu-title"
 import { generateTempPassword, hashPassword } from "~/features/auth/model/credentials.server"
-import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
+import { requireUser } from "~/features/auth/model/session.server"
 import { listSites } from "~/features/sites/model/sites.repository.server"
 import {
   listSiteMailSiteIdsByMember,
@@ -32,6 +33,7 @@ import {
   updateMember,
 } from "~/features/members/model/members.repository.server"
 import { formatManagedSites } from "~/features/members/lib/format-managed-sites"
+import { canSiteMasterManage } from "~/features/members/lib/site-master-scope"
 import type { BulkCreateRow } from "~/features/members/ui/member-bulk-create-modal"
 import { MemberBulkCreateModal } from "~/features/members/ui/member-bulk-create-modal"
 import { MemberCreatedModal, type CreatedAccount } from "~/features/members/ui/member-created-modal"
@@ -73,7 +75,26 @@ export async function loader({ request }: LoaderFunctionArgs) {
   } catch (error) {
     console.error("멤버 목록을 불러오지 못했습니다:", error)
   }
-  return { members, currentUserId: user.id, sites, mailSites, mailSiteIdsByMember, canManage: isHeadquarters(user.role) }
+  // 현장 마스터는 본인 현장 일반 계정만 만들고 고칠 수 있다(2026-10-06). 고를 수 있는 현장도 본인 현장으로 좁힌다.
+  const siteMaster = isSiteMaster(user)
+  const masterMailSiteIds = mailSiteIdsByMember[user.id] ?? []
+  const manageableMemberIds = siteMaster
+    ? members
+        .filter((member) => canSiteMasterManage(user, masterMailSiteIds, member, mailSiteIdsByMember[member.id] ?? []))
+        .map((member) => member.id)
+    : []
+  return {
+    members,
+    currentUserId: user.id,
+    sites,
+    mailSites,
+    mailSiteIdsByMember,
+    canManage: isHeadquarters(user.role),
+    siteMaster,
+    manageableMemberIds,
+    masterSites: siteMaster ? sites.filter((site) => site.id === user.siteId) : [],
+    masterMailSites: siteMaster ? mailSites.filter((site) => masterMailSiteIds.includes(site.id)) : [],
+  }
 }
 
 // siteId: 대외기관 점검 현장(sites), mailSiteId: 현장별 메일함 현장(site_mail_sites). 두 목록은 서로 독립적이다.
@@ -90,24 +111,46 @@ function computeManagedSiteIds(existing: Member, role: CreatableMemberRole, site
   return existing.managedSiteIds
 }
 
+// 현장 마스터 요청이면 고른 현장이 마스터 본인 현장인지 확인한다. 아니면 오류 메시지를 돌려준다.
+function checkMasterSites(master: Member, masterMailSiteIds: number[], siteId: number | null, mailSiteId: number | null): string | null {
+  if (siteId !== null && siteId !== master.siteId) return "본인 현장에만 계정을 만들 수 있습니다."
+  if (mailSiteId !== null && !masterMailSiteIds.includes(mailSiteId)) return "본인 현장에만 계정을 만들 수 있습니다."
+  return null
+}
+
 export async function action({ request }: ActionFunctionArgs) {
-  const user = await requireHeadquarters(request)
+  const user = await requireUser(request)
+  const headquarters = isHeadquarters(user.role)
+  const siteMaster = isSiteMaster(user)
+  if (!headquarters && !siteMaster) throw redirect("/forbidden")
   const form = await request.formData()
   const intent = String(form.get("intent") ?? "")
 
   try {
+    // 현장 마스터 권한 판정에 쓰는 메일함 담당 현장 목록. 본사 요청에서는 쓰지 않는다.
+    const mailSiteIdsByMember = siteMaster ? await listSiteMailSiteIdsByMember() : {}
+    const masterMailSiteIds = mailSiteIdsByMember[user.id] ?? []
+    const canManageTarget = (target: Member) =>
+      headquarters || canSiteMasterManage(user, masterMailSiteIds, target, mailSiteIdsByMember[target.id] ?? [])
+
     switch (intent) {
       case "member.create": {
         const name = String(form.get("name") ?? "").trim()
         const email = String(form.get("email") ?? "").trim()
-        const role = String(form.get("role") ?? "member") as CreatableMemberRole
+        // 현장 마스터는 일반 현장관리자 계정만 만들 수 있다(역할·메뉴 권한·마스터 지정 고정).
+        const role = headquarters ? (String(form.get("role") ?? "member") as CreatableMemberRole) : "member"
         const position = String(form.get("position") ?? "").trim() || null
         const department = String(form.get("department") ?? "").trim() || null
-        const menuPermission = String(form.get("menuPermission") ?? "limited") as MenuPermission
+        const menuPermission = headquarters ? (String(form.get("menuPermission") ?? "limited") as MenuPermission) : "limited"
+        const isSiteMasterValue = headquarters && role === "member" && form.get("isSiteMaster") === "true"
         const { siteId, mailSiteId } = readSiteIds(form)
 
         if (!name || !email) return data({ error: "이름과 이메일을 입력하세요." }, { status: 400 })
         if (role === "member" && siteId === null && mailSiteId === null) return data({ error: "소속 현장을 선택하세요." }, { status: 400 })
+        if (!headquarters) {
+          const siteError = checkMasterSites(user, masterMailSiteIds, siteId, mailSiteId)
+          if (siteError) return data({ error: siteError }, { status: 403 })
+        }
         if (await getMemberByEmail(email)) return data({ error: "이미 등록된 이메일입니다." }, { status: 400 })
 
         const tempPassword = generateTempPassword()
@@ -124,17 +167,22 @@ export async function action({ request }: ActionFunctionArgs) {
           passwordHash: hashPassword(tempPassword),
           joinedAt: new Date().toISOString().slice(0, 10),
           mustChangePassword: true,
+          isSiteMaster: isSiteMasterValue,
         })
         if (role === "member" && mailSiteId !== null) await setMemberSiteMailSite(createdMember.id, mailSiteId)
 
         return { ok: true as const, created: [{ name, email, tempPassword }] }
       }
       case "member.bulkCreate": {
-        const role = String(form.get("role") ?? "member") as CreatableMemberRole
+        const role = headquarters ? (String(form.get("role") ?? "member") as CreatableMemberRole) : "member"
         const { siteId, mailSiteId } = readSiteIds(form)
         const rows = JSON.parse(String(form.get("rows") ?? "[]")) as { name: string; email: string }[]
 
         if (role === "member" && siteId === null && mailSiteId === null) return data({ error: "소속 현장을 선택하세요." }, { status: 400 })
+        if (!headquarters) {
+          const siteError = checkMasterSites(user, masterMailSiteIds, siteId, mailSiteId)
+          if (siteError) return data({ error: siteError }, { status: 403 })
+        }
 
         const created: CreatedAccount[] = []
         const seenEmails = new Set<string>()
@@ -160,6 +208,7 @@ export async function action({ request }: ActionFunctionArgs) {
             passwordHash: hashPassword(tempPassword),
             joinedAt: new Date().toISOString().slice(0, 10),
             mustChangePassword: true,
+            isSiteMaster: false,
           })
           if (role === "member" && mailSiteId !== null) await setMemberSiteMailSite(createdMember.id, mailSiteId)
           created.push({ name, email, tempPassword })
@@ -174,15 +223,26 @@ export async function action({ request }: ActionFunctionArgs) {
         const id = String(form.get("id") ?? "")
         const existing = await getMemberById(id)
         if (!existing) return data({ error: "존재하지 않는 계정입니다." }, { status: 400 })
+        if (!canManageTarget(existing)) return data({ error: "이 계정을 수정할 권한이 없습니다." }, { status: 403 })
 
         const name = String(form.get("name") ?? "").trim()
-        const role = String(form.get("role") ?? "member") as CreatableMemberRole
+        const role = headquarters ? (String(form.get("role") ?? "member") as CreatableMemberRole) : "member"
         const position = String(form.get("position") ?? "").trim() || null
         const department = String(form.get("department") ?? "").trim() || null
-        const menuPermission = String(form.get("menuPermission") ?? "limited") as MenuPermission
+        const menuPermission = headquarters
+          ? (String(form.get("menuPermission") ?? "limited") as MenuPermission)
+          : existing.menuPermission
+        const isSiteMasterValue = headquarters ? role === "member" && form.get("isSiteMaster") === "true" : false
         const { siteId, mailSiteId } = readSiteIds(form)
 
         if (!name) return data({ error: "이름을 입력하세요." }, { status: 400 })
+
+        // 현장 마스터는 이름·직위·부서만 고친다. 소속 현장은 다른 현장 배정까지 지워질 수 있어 본사만 바꾼다.
+        if (!headquarters) {
+          await updateMember(id, { name, position, department })
+          return { ok: true as const }
+        }
+
         if (role === "member" && siteId === null && mailSiteId === null) return data({ error: "소속 현장을 선택하세요." }, { status: 400 })
 
         await updateMember(id, {
@@ -193,6 +253,7 @@ export async function action({ request }: ActionFunctionArgs) {
           menuPermission,
           siteId: role === "member" ? siteId : null,
           managedSiteIds: computeManagedSiteIds(existing, role, siteId),
+          isSiteMaster: isSiteMasterValue,
         })
         // 본사관리자는 담당 지정 없이도 모든 메일함 현장에 쓸 수 있으므로 담당 지정을 비운다.
         await setMemberSiteMailSite(id, role === "member" ? mailSiteId : null)
@@ -201,6 +262,8 @@ export async function action({ request }: ActionFunctionArgs) {
       case "member.delete": {
         const id = String(form.get("id") ?? "")
         if (id === user.id) return data({ error: "본인 계정은 삭제할 수 없습니다." }, { status: 400 })
+        const target = await getMemberById(id)
+        if (target && !canManageTarget(target)) return data({ error: "이 계정을 삭제할 권한이 없습니다." }, { status: 403 })
         await deleteMember(id)
         return { ok: true as const }
       }
@@ -208,11 +271,14 @@ export async function action({ request }: ActionFunctionArgs) {
         const ids = JSON.parse(String(form.get("ids") ?? "[]")) as string[]
         for (const id of ids) {
           if (id === user.id) continue
+          const target = await getMemberById(id)
+          if (target && !canManageTarget(target)) continue
           await deleteMember(id)
         }
         return { ok: true as const }
       }
       case "member.updateSitePermission": {
+        if (!headquarters) return data({ error: "관리 현장 권한은 본사관리자만 바꿀 수 있습니다." }, { status: 403 })
         const id = String(form.get("id") ?? "")
         const raw = String(form.get("managedSiteIds") ?? "null")
         const managedSiteIds = raw === "null" ? null : (JSON.parse(raw) as number[])
@@ -229,7 +295,21 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function MembersRoute() {
-  const { members, currentUserId, sites, mailSites, mailSiteIdsByMember, canManage } = useLoaderData<typeof loader>()
+  const {
+    members,
+    currentUserId,
+    sites,
+    mailSites,
+    mailSiteIdsByMember,
+    canManage,
+    siteMaster,
+    manageableMemberIds,
+    masterSites,
+    masterMailSites,
+  } = useLoaderData<typeof loader>()
+  // 계정 생성·수정·삭제 화면 권한. 본사는 전체 계정, 현장 마스터는 본인 현장 일반 계정만.
+  const canCreate = canManage || siteMaster
+  const canManageRow = (member: Member) => canManage || manageableMemberIds.includes(member.id)
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get("tab") === "site-permissions" ? "site-permissions" : "members"
 
@@ -317,9 +397,11 @@ export default function MembersRoute() {
     })
   }
 
+  const selectableMembers = filteredMembers.filter(canManageRow)
+
   function toggleAll() {
     setSelectedIds((prev) =>
-      prev.size === filteredMembers.length ? new Set() : new Set(filteredMembers.map((m) => m.id)),
+      prev.size === selectableMembers.length ? new Set() : new Set(selectableMembers.map((m) => m.id)),
     )
   }
 
@@ -345,6 +427,7 @@ export default function MembersRoute() {
         menuPermission: values.menuPermission,
         siteId: values.siteId !== null ? String(values.siteId) : "",
         mailSiteId: values.mailSiteId !== null ? String(values.mailSiteId) : "",
+        isSiteMaster: values.isSiteMaster ? "true" : "false",
       },
       { method: "post" },
     )
@@ -399,9 +482,13 @@ export default function MembersRoute() {
     <div className="space-y-4">
       <PageHeader
         title={pageTitle}
-        description="본사관리자·현장관리자 계정과 관리 현장 권한을 관리합니다"
+        description={
+          siteMaster
+            ? "현장 마스터는 본인 현장의 현장관리자 계정을 생성·수정·삭제할 수 있습니다"
+            : "본사관리자·현장관리자 계정과 관리 현장 권한을 관리합니다"
+        }
         actions={
-          canManage ? (
+          canCreate ? (
             <>
               <span className="hidden text-sm text-muted-foreground sm:inline">총 {members.length}명</span>
               <Button variant="outline" onClick={() => setBulkModalOpen(true)}>
@@ -460,7 +547,7 @@ export default function MembersRoute() {
           ) : null}
         </div>
 
-        {canManage && tab === "members" && selectedIds.size > 0 ? (
+        {canCreate && tab === "members" && selectedIds.size > 0 ? (
           <div className="mt-3 flex items-center justify-between rounded-md bg-danger/5 px-3 py-2">
             <p className="text-sm text-foreground">{selectedIds.size}명 선택됨</p>
             <Button variant="danger" size="sm" onClick={deleteSelected} disabled={deleteFetcher.state !== "idle"}>
@@ -477,10 +564,11 @@ export default function MembersRoute() {
             <Table>
               <THead>
                 <TR>
-                  {canManage ? (
+                  {canCreate ? (
                     <TH className="w-10">
                       <Checkbox
-                        checked={selectedIds.size === filteredMembers.length}
+                        checked={selectableMembers.length > 0 && selectedIds.size === selectableMembers.length}
+                        disabled={selectableMembers.length === 0}
                         onChange={toggleAll}
                         aria-label="전체 선택"
                       />
@@ -492,17 +580,23 @@ export default function MembersRoute() {
                   <TH>메뉴 권한</TH>
                   <TH>직위 / 부서</TH>
                   <TH>관리 현장</TH>
-                  {canManage ? <TH className="text-right">액션</TH> : null}
+                  {canCreate ? <TH className="text-right">액션</TH> : null}
                 </TR>
               </THead>
               <TBody>
                 {filteredMembers.map((member) => {
                   const group = getMemberGroup(member.role)
+                  const manageable = canManageRow(member)
                   return (
                     <TR key={member.id}>
-                      {canManage ? (
+                      {canCreate ? (
                         <TD>
-                          <Checkbox checked={selectedIds.has(member.id)} onChange={() => toggleOne(member.id)} aria-label="선택" />
+                          <Checkbox
+                            checked={selectedIds.has(member.id)}
+                            onChange={() => toggleOne(member.id)}
+                            disabled={!manageable}
+                            aria-label="선택"
+                          />
                         </TD>
                       ) : null}
                       <TD>
@@ -534,6 +628,11 @@ export default function MembersRoute() {
                       <TD className="text-muted-foreground">{member.email}</TD>
                       <TD>
                         <Badge tone={MEMBER_GROUP_TONE[group]}>{MEMBER_GROUP_LABEL[group]}</Badge>
+                        {member.isSiteMaster ? (
+                          <Badge tone="warning" className="ml-1.5">
+                            현장 마스터
+                          </Badge>
+                        ) : null}
                       </TD>
                       <TD className="text-sm text-muted-foreground">{MENU_PERMISSION_LABEL[member.menuPermission]}</TD>
                       <TD>
@@ -541,9 +640,9 @@ export default function MembersRoute() {
                         <p className="text-xs text-muted-foreground">{member.department ?? "-"}</p>
                       </TD>
                       <TD className="text-sm text-muted-foreground">{formatMemberSites(member)}</TD>
-                      {canManage ? (
+                      {canCreate ? (
                         <TD className="text-right">
-                          <Button variant="ghost" size="icon" aria-label="수정" onClick={() => openEdit(member)}>
+                          <Button variant="ghost" size="icon" aria-label="수정" onClick={() => openEdit(member)} disabled={!manageable}>
                             <Pencil className="size-4" aria-hidden />
                           </Button>
                           <Button
@@ -551,7 +650,7 @@ export default function MembersRoute() {
                             size="icon"
                             aria-label="삭제"
                             onClick={() => setDeletingMember(member)}
-                            disabled={member.id === currentUserId}
+                            disabled={member.id === currentUserId || !manageable}
                           >
                             <Trash2 className="size-4 text-danger" aria-hidden />
                           </Button>
@@ -600,15 +699,16 @@ export default function MembersRoute() {
         </div>
       </Card>
 
-      {canManage ? (
+      {canCreate ? (
         <MemberFormModal
           open={formModalOpen}
           onClose={() => {
             setFormModalOpen(false)
             setEditingMember(null)
           }}
-          sites={sites}
-          mailSites={mailSites}
+          sites={siteMaster ? masterSites : sites}
+          mailSites={siteMaster ? masterMailSites : mailSites}
+          siteMasterMode={siteMaster}
           editingMemberMailSiteIds={editingMember ? (mailSiteIdsByMember[editingMember.id] ?? []) : []}
           editingMember={editingMember}
           pending={formFetcher.state !== "idle"}
@@ -617,12 +717,13 @@ export default function MembersRoute() {
         />
       ) : null}
 
-      {canManage ? (
+      {canCreate ? (
         <MemberBulkCreateModal
           open={bulkModalOpen}
           onClose={() => setBulkModalOpen(false)}
-          sites={sites}
-          mailSites={mailSites}
+          sites={siteMaster ? masterSites : sites}
+          mailSites={siteMaster ? masterMailSites : mailSites}
+          siteMasterMode={siteMaster}
           pending={bulkFetcher.state !== "idle"}
           error={bulkError}
           onSubmit={handleBulkSubmit}
@@ -642,7 +743,7 @@ export default function MembersRoute() {
         />
       ) : null}
 
-      {canManage ? (
+      {canCreate ? (
         <Modal
           open={deletingMember !== null}
           onClose={() => setDeletingMember(null)}

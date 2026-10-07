@@ -418,6 +418,7 @@ Columns:
   password_hash text -- salt:hash(scrypt, node:crypto). 평문 비밀번호는 저장하지 않는다.
   joined_at date
   must_change_password boolean (기본 true)
+  is_site_master boolean (기본 false) -- 현장 마스터. true인 현장(member) 계정은 자기 현장 일반 계정을 생성·수정·삭제할 수 있다(2026-10-06)
   created_at timestamptz
   updated_at timestamptz
 Primary key: id
@@ -428,7 +429,7 @@ RLS policies: RLS enabled. members_no_direct_access(전체 거부, anon/authenti
 RPC/functions: strip_deleted_site_from_managed_sites() + trigger sites_cleanup_managed_site_ids(sites AFTER 아님 BEFORE DELETE) — 현장 삭제 시 모든 멤버의 managed_site_ids 배열에서 해당 site_id를 제거한다(FK로 표현할 수 없는 배열 컬럼의 고아 참조 방지).
 Related APIs: apps/web/app/routes/members.tsx (loader/action, intent=member.*), apps/web/app/routes/login.tsx, apps/web/app/routes/change-password.tsx — apps/web/app/features/members/model/members.repository.server.ts를 직접 호출
 Related frontend screens: /members (멤버 관리 + 관리 현장 권한 탭), /login, /change-password
-Migration file: supabase/migrations/20260715005123_add_members_table.sql
+Migration file: supabase/migrations/20260715005123_add_members_table.sql, supabase/migrations/20261006090000_add_member_site_master.sql
 Notes:
   - Duplicated data: managed_site_ids(bigint[])는 sites.id를 정규화된 join table 없이 배열로 보관한다.
   - Source of truth: 각 site_id 값의 존재 여부는 sites 테이블.

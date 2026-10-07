@@ -19,6 +19,9 @@ export interface Member {
   joinedAt: string
   // true면 로그인은 되지만 비밀번호부터 바꿔야 한다(계정 생성 시 강제 임시 비밀번호 발급).
   mustChangePassword: boolean
+  // 현장 마스터. true인 현장(member) 계정은 자기 현장 소속 일반 현장 계정을 생성·수정·삭제할 수 있다.
+  // 본사 계정은 항상 false다(본사는 이미 모든 계정을 관리한다).
+  isSiteMaster: boolean
 }
 
 export const MEMBER_ROLE_LABEL: Record<MemberRole, string> = {
@@ -83,6 +86,11 @@ export const CREATABLE_MEMBER_ROLE_OPTIONS: { value: CreatableMemberRole; label:
   { value: "manager", label: MEMBER_GROUP_LABEL.headquarters },
   { value: "member", label: MEMBER_GROUP_LABEL.site },
 ]
+
+// 멤버 관리 화면의 계정 생성·수정 권한. 본사는 전체, 현장 마스터는 자기 현장 일반 계정만.
+export function isSiteMaster(user: Member): boolean {
+  return user.role === "member" && user.isSiteMaster
+}
 
 // 현장 점검(site_inspections) 같은 "현장이 직접 작성하는" 도메인의 쓰기 권한 판정.
 // 본사는 모든 현장에 쓸 수 있고, 현장 계정은 자신이 소속된 현장에만 쓸 수 있다.
