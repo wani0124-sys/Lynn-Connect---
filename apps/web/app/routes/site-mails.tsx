@@ -55,10 +55,16 @@ const SORT_OPTIONS: { value: SiteMailPostSort; label: string }[] = [
   { value: "created_asc", label: "등록일 오래된순" },
 ]
 
+function readCategoryParam(params: URLSearchParams): string | undefined {
+  const value = params.get("cat")
+  return value && value !== "null" ? value : undefined
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireUser(request)
   const url = new URL(request.url)
-  const categoryId = url.searchParams.get("cat") ?? undefined
+  // "없음" 탭은 2026-10-07 사용자 요청으로 뺐다("전체"에 함께 보임). 예전 주소의 =null은 "전체"로 취급한다.
+  const categoryId = readCategoryParam(url.searchParams)
   const search = url.searchParams.get("q") ?? undefined
   const sort = (url.searchParams.get("sort") as SiteMailPostSort | null) ?? "sent_desc"
   const page = Number(url.searchParams.get("page") ?? "1") || 1
@@ -219,7 +225,7 @@ export default function SiteMailsRoute() {
     setSelectedIds(new Set())
   }, [postList])
 
-  const selectedCatParam = searchParams.get("cat") ?? ""
+  const selectedCatParam = readCategoryParam(searchParams) ?? ""
   const sort = (searchParams.get("sort") as SiteMailPostSort | null) ?? "sent_desc"
   const page = Number(searchParams.get("page") ?? "1") || 1
   const totalPages = Math.max(1, Math.ceil(postList.total / postList.limit))
@@ -258,8 +264,8 @@ export default function SiteMailsRoute() {
   const selectedCatPath = /^\d+$/.test(selectedCatParam) ? getCategoryAncestry(categories, Number(selectedCatParam)) : []
   const catTabRows = [
     {
-      items: [{ value: "", label: "전체" }, { value: "null", label: "없음" }, ...getChildCategories(categories, null).map(toCatTab)],
-      value: selectedCatParam === "null" ? "null" : selectedCatPath[0] ? String(selectedCatPath[0].id) : "",
+      items: [{ value: "", label: "전체" }, ...getChildCategories(categories, null).map(toCatTab)],
+      value: selectedCatPath[0] ? String(selectedCatPath[0].id) : "",
     },
   ]
   for (const [index, parent] of selectedCatPath.entries()) {
