@@ -409,7 +409,7 @@ Columns:
   name text
   email text (대소문자 무관 유니크, lower(email) unique index)
   role text ('admin' | 'manager' | 'member', check constraint)
-  status text ('active' | 'invited' | 'suspended', check constraint, 기본 'invited')
+  status text ('active' | 'invited' | 'suspended' | 'pending', check constraint, 기본 'invited') -- pending: 회원가입(/signup) 신청 후 승인 대기, 로그인 불가(2026-10-08)
   site_id bigint (FK, on delete set null) -- 현장(member) 계정의 소속 현장. 본사(admin/manager)는 null
   position text (nullable)
   department text (nullable)
@@ -427,7 +427,7 @@ Indexes: members_site_id_idx, members_email_lower_idx (unique, lower(email))
 Unique constraints: members_email_lower_idx (lower(email))
 RLS policies: RLS enabled. members_no_direct_access(전체 거부, anon/authenticated) — service role로만 접근.
 RPC/functions: strip_deleted_site_from_managed_sites() + trigger sites_cleanup_managed_site_ids(sites AFTER 아님 BEFORE DELETE) — 현장 삭제 시 모든 멤버의 managed_site_ids 배열에서 해당 site_id를 제거한다(FK로 표현할 수 없는 배열 컬럼의 고아 참조 방지).
-Related APIs: apps/web/app/routes/members.tsx (loader/action, intent=member.*), apps/web/app/routes/login.tsx, apps/web/app/routes/change-password.tsx — apps/web/app/features/members/model/members.repository.server.ts를 직접 호출
+Related APIs: apps/web/app/routes/members.tsx (loader/action, intent=member.*), apps/web/app/routes/login.tsx, apps/web/app/routes/signup.tsx, apps/web/app/routes/change-password.tsx — apps/web/app/features/members/model/members.repository.server.ts를 직접 호출
 Related frontend screens: /members (멤버 관리 + 관리 현장 권한 탭), /login, /change-password
 Migration file: supabase/migrations/20260715005123_add_members_table.sql, supabase/migrations/20261006090000_add_member_site_master.sql
 Notes:

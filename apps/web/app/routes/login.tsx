@@ -1,5 +1,4 @@
 import { data, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
-import { Waypoints } from "lucide-react"
 import { loginSchema } from "~/features/auth/model/login.schema"
 import {
   createUserSession,
@@ -7,8 +6,8 @@ import {
   safeRedirect,
 } from "~/features/auth/model/session.server"
 import { verifyCredentials } from "~/features/auth/model/credentials.server"
+import { AuthShell } from "~/features/auth/ui/auth-shell"
 import { LoginForm } from "~/features/auth/ui/login-form"
-import { Card, CardContent, CardHeader, CardTitle } from "~/shared/ui/card"
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const userId = await getUserId(request)
@@ -35,55 +34,28 @@ export async function action({ request }: ActionFunctionArgs) {
     )
   }
 
-  const userId = await verifyCredentials(parsed.data.email, parsed.data.password)
-  if (!userId) {
+  const result = await verifyCredentials(parsed.data.email, parsed.data.password)
+  if (!result.ok) {
     return data(
       {
         errors: {},
-        formError: "이메일 또는 비밀번호가 올바르지 않습니다.",
+        formError:
+          result.reason === "pending"
+            ? "가입 승인 대기 중입니다. 관리자 승인 후 로그인할 수 있습니다."
+            : "이메일 또는 비밀번호가 올바르지 않습니다.",
         values: { email },
       },
       { status: 400 },
     )
   }
 
-  return createUserSession(userId, redirectTo)
+  return createUserSession(result.id, redirectTo)
 }
 
 export default function LoginRoute() {
   return (
-    <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-slate-950 p-4">
-      {/* 배경 영상: 소리 없이 반복 재생. 파일이 없거나 움직임 줄이기 설정이면 남색 배경만 보인다. */}
-      <video
-        className="pointer-events-none absolute inset-0 size-full object-cover motion-reduce:hidden"
-        src="/videos/login-bg.mp4"
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="auto"
-        aria-hidden
-      />
-      <div className="pointer-events-none absolute inset-0 bg-slate-950/70" aria-hidden />
-
-      <div className="relative w-full max-w-sm">
-        <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Waypoints className="size-5" aria-hidden />
-          </div>
-          <h1 className="text-lg font-semibold tracking-tight text-white">Lynn-Connect</h1>
-          <p className="text-sm text-white/70">관리자 콘솔에 로그인</p>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>로그인</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <LoginForm />
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+    <AuthShell title="로그인">
+      <LoginForm />
+    </AuthShell>
   )
 }

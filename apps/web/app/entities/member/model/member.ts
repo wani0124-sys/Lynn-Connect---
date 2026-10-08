@@ -1,5 +1,6 @@
 export type MemberRole = "admin" | "manager" | "member"
-export type MemberStatus = "active" | "invited" | "suspended"
+// pending: 회원가입(/signup)으로 신청해 관리자 승인을 기다리는 계정. 승인 전에는 로그인할 수 없다.
+export type MemberStatus = "active" | "invited" | "suspended" | "pending"
 export type MenuPermission = "all" | "limited"
 
 export interface Member {
@@ -40,12 +41,14 @@ export const MEMBER_STATUS_LABEL: Record<MemberStatus, string> = {
   active: "활성",
   invited: "초대됨",
   suspended: "정지",
+  pending: "승인 대기",
 }
 
 export const MEMBER_STATUS_TONE: Record<MemberStatus, "success" | "warning" | "danger"> = {
   active: "success",
   invited: "warning",
   suspended: "danger",
+  pending: "warning",
 }
 
 export const MENU_PERMISSION_LABEL: Record<MenuPermission, string> = {
