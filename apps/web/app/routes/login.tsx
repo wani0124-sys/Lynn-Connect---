@@ -52,14 +52,27 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function LoginRoute() {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-muted/40 p-4">
-      <div className="w-full max-w-sm">
+    <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-slate-950 p-4">
+      {/* 배경 영상: 소리 없이 반복 재생. 파일이 없거나 움직임 줄이기 설정이면 남색 배경만 보인다. */}
+      <video
+        className="pointer-events-none absolute inset-0 size-full object-cover motion-reduce:hidden"
+        src="/videos/login-bg.mp4"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        aria-hidden
+      />
+      <div className="pointer-events-none absolute inset-0 bg-slate-950/70" aria-hidden />
+
+      <div className="relative w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
           <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Waypoints className="size-5" aria-hidden />
           </div>
-          <h1 className="text-lg font-semibold tracking-tight">Lynn-Connect</h1>
-          <p className="text-sm text-muted-foreground">관리자 콘솔에 로그인</p>
+          <h1 className="text-lg font-semibold tracking-tight text-white">Lynn-Connect</h1>
+          <p className="text-sm text-white/70">관리자 콘솔에 로그인</p>
         </div>
 
         <Card>
