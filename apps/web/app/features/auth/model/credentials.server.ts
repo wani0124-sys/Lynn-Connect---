@@ -19,13 +19,17 @@ function verifyPassword(password: string, stored: string): boolean {
   return timingSafeEqual(hash, storedHash)
 }
 
-// 성공하면 member id를, 실패하면 null을 반환한다. 정지 계정은 로그인할 수 없다.
-export async function verifyCredentials(email: string, password: string): Promise<string | null> {
+export type VerifyCredentialsResult = { ok: true; id: string } | { ok: false; reason: "invalid" | "pending" }
+
+// 정지 계정은 로그인할 수 없다. 승인 대기(pending)는 비밀번호가 맞을 때만 알려준다
+// (틀린 비밀번호로 가입 신청 여부를 떠볼 수 없게).
+export async function verifyCredentials(email: string, password: string): Promise<VerifyCredentialsResult> {
   const credentials = await getMemberCredentialsByEmail(email)
-  if (!credentials) return null
-  if (credentials.status === "suspended") return null
-  if (!verifyPassword(password, credentials.passwordHash)) return null
-  return credentials.id
+  if (!credentials) return { ok: false, reason: "invalid" }
+  if (credentials.status === "suspended") return { ok: false, reason: "invalid" }
+  if (!verifyPassword(password, credentials.passwordHash)) return { ok: false, reason: "invalid" }
+  if (credentials.status === "pending") return { ok: false, reason: "pending" }
+  return { ok: true, id: credentials.id }
 }
 
 // 멤버 관리에서 기존 계정의 비밀번호를 재발급/변경할 때 사용한다(계정 생성 시에는 password_hash를

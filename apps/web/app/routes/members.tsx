@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { data, redirect, useFetcher, useLoaderData, useSearchParams, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
-import { Pencil, Plus, Search, Trash2, UsersRound } from "lucide-react"
+import { Check, Pencil, Plus, Search, Trash2, UsersRound, X } from "lucide-react"
 import {
   MEMBER_GROUP_LABEL,
   MEMBER_GROUP_TONE,
@@ -279,6 +279,17 @@ export async function action({ request }: ActionFunctionArgs) {
         }
         return { ok: true as const }
       }
+      // 회원가입(/signup) 신청 승인·거절. 본사는 모든 신청, 현장 마스터는 자기 현장 현장관리자 신청만.
+      case "member.approve":
+      case "member.reject": {
+        const id = String(form.get("id") ?? "")
+        const target = await getMemberById(id)
+        if (!target || target.status !== "pending") return data({ error: "승인 대기 중인 신청이 아닙니다." }, { status: 400 })
+        if (!canManageTarget(target)) return data({ error: "이 신청을 처리할 권한이 없습니다." }, { status: 403 })
+        if (intent === "member.approve") await updateMember(id, { status: "active" })
+        else await deleteMember(id)
+        return { ok: true as const }
+      }
       case "member.updateSitePermission": {
         if (!headquarters) return data({ error: "관리 현장 권한은 본사관리자만 바꿀 수 있습니다." }, { status: 403 })
         const id = String(form.get("id") ?? "")
@@ -317,7 +328,7 @@ export default function MembersRoute() {
 
   const [query, setQuery] = useState("")
   const [siteFilter, setSiteFilter] = useState("")
-  const [groupFilter, setGroupFilter] = useState<"" | MemberGroup>("")
+  const [groupFilter, setGroupFilter] = useState<"" | MemberGroup | "pending">("")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const [formModalOpen, setFormModalOpen] = useState(false)
@@ -331,6 +342,9 @@ export default function MembersRoute() {
   const bulkFetcher = useFetcher<typeof action>()
   const permissionFetcher = useFetcher<typeof action>()
   const deleteFetcher = useFetcher<typeof action>()
+  const approvalFetcher = useFetcher<typeof action>()
+  const [rejectingMember, setRejectingMember] = useState<Member | null>(null)
+  const approvalError = approvalFetcher.data && "error" in approvalFetcher.data ? approvalFetcher.data.error : null
 
   const formError = formFetcher.data && "error" in formFetcher.data ? formFetcher.data.error : null
   const bulkError = bulkFetcher.data && "error" in bulkFetcher.data ? bulkFetcher.data.error : null
@@ -367,18 +381,31 @@ export default function MembersRoute() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deleteFetcher.state, deleteFetcher.data])
 
+  useEffect(() => {
+    if (approvalFetcher.state === "idle" && approvalFetcher.data && "ok" in approvalFetcher.data && approvalFetcher.data.ok) {
+      setRejectingMember(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [approvalFetcher.state, approvalFetcher.data])
+
+  const pendingCount = members.filter((member) => member.status === "pending").length
+
   const filteredMembers = useMemo(() => {
     const q = query.trim().toLowerCase()
     const siteId = siteFilter ? Number(siteFilter) : null
-    return members.filter((member) => {
+    const filtered = members.filter((member) => {
       if (q && !member.name.toLowerCase().includes(q) && !member.email.toLowerCase().includes(q)) return false
-      if (groupFilter && getMemberGroup(member.role) !== groupFilter) return false
+      if (groupFilter === "pending") {
+        if (member.status !== "pending") return false
+      } else if (groupFilter && getMemberGroup(member.role) !== groupFilter) return false
       if (siteId !== null) {
         const managesSite = member.managedSiteIds === null || member.managedSiteIds.includes(siteId) || member.siteId === siteId
         if (!managesSite) return false
       }
       return true
     })
+    // 승인 대기 신청을 맨 위에 둔다.
+    return [...filtered.filter((m) => m.status === "pending"), ...filtered.filter((m) => m.status !== "pending")]
   }, [members, query, siteFilter, groupFilter])
 
   function setTab(next: string) {
@@ -466,6 +493,15 @@ export default function MembersRoute() {
     deleteFetcher.submit({ intent: "member.bulkDelete", ids: JSON.stringify([...selectedIds]) }, { method: "post" })
   }
 
+  function approve(member: Member) {
+    approvalFetcher.submit({ intent: "member.approve", id: member.id }, { method: "post" })
+  }
+
+  function handleReject() {
+    if (!rejectingMember) return
+    approvalFetcher.submit({ intent: "member.reject", id: rejectingMember.id }, { method: "post" })
+  }
+
   function handlePermissionSubmit(managedSiteIds: number[] | null) {
     if (!permissionTarget) return
     permissionFetcher.submit(
@@ -539,15 +575,27 @@ export default function MembersRoute() {
           {tab === "members" ? (
             <Select
               value={groupFilter}
-              onChange={(e) => setGroupFilter(e.target.value as "" | MemberGroup)}
+              onChange={(e) => setGroupFilter(e.target.value as "" | MemberGroup | "pending")}
               aria-label="역할 필터"
             >
               <option value="">전체 역할</option>
               <option value="headquarters">{MEMBER_GROUP_LABEL.headquarters}</option>
               <option value="site">{MEMBER_GROUP_LABEL.site}</option>
+              <option value="pending">승인 대기 ({pendingCount})</option>
             </Select>
           ) : null}
         </div>
+
+        {canCreate && tab === "members" && pendingCount > 0 && groupFilter !== "pending" ? (
+          <div className="mt-3 flex items-center justify-between rounded-md bg-warning/10 px-3 py-2">
+            <p className="text-sm text-foreground">회원가입 승인 대기 {pendingCount}건이 있습니다.</p>
+            <Button variant="outline" size="sm" onClick={() => setGroupFilter("pending")}>
+              대기 목록 보기
+            </Button>
+          </div>
+        ) : null}
+
+        {approvalError ? <p className="mt-3 text-sm text-danger">{approvalError}</p> : null}
 
         {canCreate && tab === "members" && selectedIds.size > 0 ? (
           <div className="mt-3 flex items-center justify-between rounded-md bg-danger/5 px-3 py-2">
@@ -617,6 +665,11 @@ export default function MembersRoute() {
                                   나
                                 </Badge>
                               ) : null}
+                              {member.status === "pending" ? (
+                                <Badge tone="warning" className="ml-1.5">
+                                  승인 대기
+                                </Badge>
+                              ) : null}
                               {member.mustChangePassword ? (
                                 <Badge tone="warning" className="ml-1.5">
                                   비밀번호 변경 대기
@@ -644,6 +697,23 @@ export default function MembersRoute() {
                       <TD className="text-sm text-muted-foreground">{formatMemberSites(member)}</TD>
                       {canCreate ? (
                         <TD className="text-right">
+                          {member.status === "pending" && manageable ? (
+                            <div className="mb-1 flex justify-end gap-1">
+                              <Button size="sm" onClick={() => approve(member)} disabled={approvalFetcher.state !== "idle"}>
+                                <Check className="size-4" aria-hidden />
+                                승인
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setRejectingMember(member)}
+                                disabled={approvalFetcher.state !== "idle"}
+                              >
+                                <X className="size-4" aria-hidden />
+                                거절
+                              </Button>
+                            </div>
+                          ) : null}
                           <Button variant="ghost" size="icon" aria-label="수정" onClick={() => openEdit(member)} disabled={!manageable}>
                             <Pencil className="size-4" aria-hidden />
                           </Button>
@@ -763,6 +833,27 @@ export default function MembersRoute() {
           }
         >
           <p className="text-sm text-muted-foreground">삭제된 계정은 로그인할 수 없습니다.</p>
+        </Modal>
+      ) : null}
+
+      {canCreate ? (
+        <Modal
+          open={rejectingMember !== null}
+          onClose={() => setRejectingMember(null)}
+          title="가입 신청 거절"
+          description={rejectingMember ? `${rejectingMember.name}(${rejectingMember.email}) 님의 가입 신청을 거절할까요?` : undefined}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setRejectingMember(null)} disabled={approvalFetcher.state !== "idle"}>
+                취소
+              </Button>
+              <Button variant="danger" onClick={handleReject} disabled={approvalFetcher.state !== "idle"}>
+                {approvalFetcher.state !== "idle" ? "처리 중…" : "거절"}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-muted-foreground">거절하면 신청 내용이 삭제되며, 같은 이메일로 다시 신청할 수 있습니다.</p>
         </Modal>
       ) : null}
     </div>
