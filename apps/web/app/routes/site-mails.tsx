@@ -402,8 +402,8 @@ export default function SiteMailsRoute() {
                         {canWrite ? <col className="w-10" /> : null}
                         <col className="w-28" />
                         <col />
-                        <col className="w-40" />
-                        <col className="w-24" />
+                        <col className="hidden w-40 lg:table-column" />
+                        <col className="hidden w-24 lg:table-column" />
                         <col className="w-14" />
                       </colgroup>
                       <THead>
@@ -419,8 +419,8 @@ export default function SiteMailsRoute() {
                           ) : null}
                           <TH>구분자</TH>
                           <TH>제목</TH>
-                          <TH>발신자</TH>
-                          <TH>등록일</TH>
+                          <TH className="hidden lg:table-cell">발신자</TH>
+                          <TH className="hidden lg:table-cell">등록일</TH>
                           <TH className="text-right">첨부</TH>
                         </TR>
                       </THead>
@@ -435,15 +435,23 @@ export default function SiteMailsRoute() {
                             <TD className="whitespace-nowrap" title={post.categoryPath ?? undefined}>
                               {post.categoryName ? <CategoryBadge name={post.categoryName} color={post.categoryColor ?? "#6b7280"} /> : null}
                             </TD>
-                            <TD className="truncate">
-                              <Link to={`/site-mails/${post.id}`} className="font-medium hover:underline" title={post.title}>
+                            <TD className="lg:truncate">
+                              <Link
+                                to={`/site-mails/${post.id}`}
+                                className="line-clamp-2 break-words font-medium hover:underline lg:inline"
+                                title={post.title}
+                              >
                                 {post.title}
                               </Link>
+                              {/* 좁은 화면에서는 발신자 칸을 숨기고 제목 아래에 작게 보여준다. */}
+                              {post.senderName ? (
+                                <p className="mt-0.5 truncate text-xs text-muted-foreground lg:hidden">{post.senderName}</p>
+                              ) : null}
                             </TD>
-                            <TD className="truncate text-sm text-muted-foreground" title={post.senderName ?? undefined}>
+                            <TD className="hidden truncate text-sm text-muted-foreground lg:table-cell" title={post.senderName ?? undefined}>
                               {post.senderName ?? "-"}
                             </TD>
-                            <TD className="whitespace-nowrap text-sm text-muted-foreground">{formatDate(post.createdAt)}</TD>
+                            <TD className="hidden whitespace-nowrap text-sm text-muted-foreground lg:table-cell">{formatDate(post.createdAt)}</TD>
                             <TD className="whitespace-nowrap text-right tabular-nums">{post.attachmentCount || ""}</TD>
                           </TR>
                         ))}
