@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { data, useFetcher, useLoaderData, useSearchParams, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -6,6 +6,8 @@ import { z } from "zod"
 import { buildMenuTree } from "~/entities/sidebar-menu/lib/build-menu-tree"
 import { usePageMenuTitle } from "~/entities/sidebar-menu/lib/use-page-menu-title"
 import { isHeadquarters } from "~/entities/member/model/member"
+import { updatePasswordSchema } from "~/features/auth/model/change-password.schema"
+import { changeOwnPassword } from "~/features/auth/model/credentials.server"
 import { requireHeadquarters, requireUser } from "~/features/auth/model/session.server"
 import {
   createMenuGroup,
@@ -58,10 +60,38 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 }
 
+type PasswordFieldErrors = { currentPassword?: string; newPassword?: string; confirmPassword?: string }
+
 export async function action({ request }: ActionFunctionArgs) {
-  await requireHeadquarters(request)
   const form = await request.formData()
   const intent = String(form.get("intent") ?? "")
+
+  // 비밀번호 변경은 모든 사용자가 본인 계정에 대해 할 수 있다. 나머지(메뉴 관리)는 본사관리자 전용.
+  if (intent === "password.change") {
+    const user = await requireUser(request)
+    const parsed = updatePasswordSchema.safeParse({
+      currentPassword: String(form.get("currentPassword") ?? ""),
+      newPassword: String(form.get("newPassword") ?? ""),
+      confirmPassword: String(form.get("confirmPassword") ?? ""),
+    })
+    if (!parsed.success) {
+      const errors = parsed.error.flatten().fieldErrors
+      const fieldErrors: PasswordFieldErrors = {
+        currentPassword: errors.currentPassword?.[0],
+        newPassword: errors.newPassword?.[0],
+        confirmPassword: errors.confirmPassword?.[0],
+      }
+      return data({ passwordErrors: fieldErrors }, { status: 400 })
+    }
+    const changed = await changeOwnPassword(user.email, parsed.data.currentPassword, parsed.data.newPassword)
+    if (!changed) {
+      const fieldErrors: PasswordFieldErrors = { currentPassword: "현재 비밀번호가 올바르지 않습니다." }
+      return data({ passwordErrors: fieldErrors }, { status: 400 })
+    }
+    return { passwordChanged: true as const }
+  }
+
+  await requireHeadquarters(request)
 
   try {
     switch (intent) {
@@ -190,12 +220,74 @@ export default function SettingsRoute() {
         </div>
       ) : (
         <>
+          <PasswordSection />
           <ProfileSection />
           <NotificationSection />
           <DangerZoneSection />
         </>
       )}
     </div>
+  )
+}
+
+function PasswordSection() {
+  const fetcher = useFetcher<typeof action>()
+  const formRef = useRef<HTMLFormElement>(null)
+  const pending = fetcher.state !== "idle"
+  const errors = fetcher.data && "passwordErrors" in fetcher.data ? fetcher.data.passwordErrors : undefined
+  const changed = fetcher.state === "idle" && !!fetcher.data && "passwordChanged" in fetcher.data
+
+  useEffect(() => {
+    if (changed) formRef.current?.reset()
+  }, [changed])
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>비밀번호 변경</CardTitle>
+        <CardDescription>현재 비밀번호를 확인한 뒤 새 비밀번호로 바꿉니다.</CardDescription>
+      </CardHeader>
+      <fetcher.Form method="post" ref={formRef}>
+        <input type="hidden" name="intent" value="password.change" />
+        <CardContent className="space-y-4">
+          <Field label="현재 비밀번호" htmlFor="current-password" required error={errors?.currentPassword}>
+            <Input
+              id="current-password"
+              name="currentPassword"
+              type="password"
+              autoComplete="current-password"
+              aria-invalid={!!errors?.currentPassword}
+            />
+          </Field>
+          <Field label="새 비밀번호" htmlFor="new-password" required hint="6자 이상" error={errors?.newPassword}>
+            <Input
+              id="new-password"
+              name="newPassword"
+              type="password"
+              autoComplete="new-password"
+              aria-invalid={!!errors?.newPassword}
+            />
+          </Field>
+          <Field label="새 비밀번호 확인" htmlFor="confirm-password" required error={errors?.confirmPassword}>
+            <Input
+              id="confirm-password"
+              name="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              aria-invalid={!!errors?.confirmPassword}
+            />
+          </Field>
+        </CardContent>
+        <CardFooter>
+          <Button type="submit" disabled={pending}>
+            {pending ? "변경 중…" : "비밀번호 변경"}
+          </Button>
+          {changed ? (
+            <span className="rounded-md bg-success/10 px-3 py-2 text-sm text-success">비밀번호가 변경되었습니다.</span>
+          ) : null}
+        </CardFooter>
+      </fetcher.Form>
+    </Card>
   )
 }
 
