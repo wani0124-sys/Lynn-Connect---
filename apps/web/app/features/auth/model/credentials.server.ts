@@ -38,6 +38,14 @@ export async function setPassword(email: string, password: string): Promise<void
   await setMemberPasswordHash(email, hashPassword(password))
 }
 
+// 설정 화면에서 본인이 비밀번호를 바꿀 때 사용한다. 현재 비밀번호가 맞아야만 바꾼다.
+export async function changeOwnPassword(email: string, currentPassword: string, newPassword: string): Promise<boolean> {
+  const credentials = await getMemberCredentialsByEmail(email)
+  if (!credentials || !verifyPassword(currentPassword, credentials.passwordHash)) return false
+  await setPassword(email, newPassword)
+  return true
+}
+
 // 계정 생성/일괄 생성 시 이메일을 아이디로, 이 값을 초기 비밀번호로 강제 부여한다.
 // 최초 로그인 후 본인이 반드시 변경해야 한다(mustChangePassword).
 export const DEFAULT_TEMP_PASSWORD = "Woomilynn"
