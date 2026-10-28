@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type DragEvent } from "react"
 import { useFetcher } from "react-router"
 import { FileUp, Paperclip, X } from "lucide-react"
 import { SITE_INSPECTION_RESULTS, type SiteInspection } from "~/entities/site/model/site.types"
+import { cn } from "~/shared/lib/cn"
 import { Button } from "~/shared/ui/button"
 import { Checkbox } from "~/shared/ui/checkbox"
 import { Field } from "~/shared/ui/field"
@@ -66,7 +67,10 @@ export function InspectionFormModal({ open, onClose, siteId, editingInspection =
   const [note, setNote] = useState(editingInspection?.note ?? "")
   const [files, setFiles] = useState<File[]>([])
   const [autofillApplied, setAutofillApplied] = useState(false)
+  const [pdfDragOver, setPdfDragOver] = useState(false)
+  const [filesDragOver, setFilesDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const pdfInputRef = useRef<HTMLInputElement>(null)
 
   const pending = fetcher.state !== "idle"
   const error = fetcher.data?.error
@@ -88,6 +92,8 @@ export function InspectionFormModal({ open, onClose, siteId, editingInspection =
     setNote("")
     setFiles([])
     setAutofillApplied(false)
+    setPdfDragOver(false)
+    setFilesDragOver(false)
   }
 
   function handleClose() {
@@ -116,11 +122,24 @@ export function InspectionFormModal({ open, onClose, siteId, editingInspection =
 
   function handlePdfAutofill(file: File | undefined) {
     if (!file) return
+    if (!file.name.toLowerCase().endsWith(".pdf")) return
     setFiles((prev) => [...prev, file])
     const formData = new FormData()
     formData.append("intent", "inspection.parsePdf")
     formData.append("file", file)
     parseFetcher.submit(formData, { method: "post", encType: "multipart/form-data" })
+  }
+
+  function handlePdfDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setPdfDragOver(false)
+    handlePdfAutofill(event.dataTransfer.files?.[0])
+  }
+
+  function handleFilesDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setFilesDragOver(false)
+    addFiles(event.dataTransfer.files)
   }
 
   useEffect(() => {
@@ -187,16 +206,33 @@ export function InspectionFormModal({ open, onClose, siteId, editingInspection =
             htmlFor="insp-pdf-autofill"
             hint="점검기관에서 받은 결과보고 PDF를 올리면 아래 항목을 자동으로 채웁니다. 추출 결과는 완벽하지 않을 수 있으니 저장 전에 꼭 확인하세요."
           >
-            <input
-              id="insp-pdf-autofill"
-              type="file"
-              accept="application/pdf"
-              onChange={(e) => {
-                handlePdfAutofill(e.target.files?.[0])
-                e.target.value = ""
+            <div
+              onClick={() => pdfInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setPdfDragOver(true)
               }}
-              className="block w-full text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
-            />
+              onDragLeave={() => setPdfDragOver(false)}
+              onDrop={handlePdfDrop}
+              className={cn(
+                "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed bg-background p-4 text-center transition-colors",
+                pdfDragOver ? "border-primary bg-primary/5" : "border-primary/30 hover:bg-muted/40",
+              )}
+            >
+              <FileUp className="size-5 text-primary" aria-hidden />
+              <p className="text-sm text-foreground">클릭하거나 결과보고 PDF를 드래그하세요</p>
+              <input
+                ref={pdfInputRef}
+                id="insp-pdf-autofill"
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  handlePdfAutofill(e.target.files?.[0])
+                  e.target.value = ""
+                }}
+              />
+            </div>
           </Field>
           {parseFetcher.state !== "idle" ? (
             <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
@@ -312,17 +348,34 @@ export function InspectionFormModal({ open, onClose, siteId, editingInspection =
         </Field>
 
         <Field label="첨부파일 (선택)" htmlFor="insp-files">
-          <input
-            ref={inputRef}
-            id="insp-files"
-            type="file"
-            multiple
-            onChange={(e) => {
-              addFiles(e.target.files)
-              e.target.value = ""
+          <div
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setFilesDragOver(true)
             }}
-            className="block w-full text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80"
-          />
+            onDragLeave={() => setFilesDragOver(false)}
+            onDrop={handleFilesDrop}
+            className={cn(
+              "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-4 text-center transition-colors",
+              filesDragOver ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40",
+            )}
+          >
+            <Paperclip className="size-5 text-muted-foreground" aria-hidden />
+            <p className="text-sm text-foreground">클릭하거나 파일을 드래그하세요</p>
+            <p className="text-xs text-muted-foreground">여러 개를 한 번에 올릴 수 있습니다</p>
+            <input
+              ref={inputRef}
+              id="insp-files"
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                addFiles(e.target.files)
+                e.target.value = ""
+              }}
+            />
+          </div>
         </Field>
 
         {files.length > 0 ? (
