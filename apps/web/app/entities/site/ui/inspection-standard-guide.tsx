@@ -54,14 +54,16 @@ export function InspectionStandardGuide() {
                 <span>{stage.note}</span>
               </div>
 
-              <div className="mt-1">
-                <img
-                  src={stage.example.src}
-                  alt={stage.example.caption}
-                  className="h-auto w-full rounded-md border border-border/5"
-                />
-                <p className="mt-2 text-center text-xs text-muted-foreground">{stage.example.caption}</p>
-              </div>
+              <figure className="mt-1">
+                <div className="flex aspect-[4/5] items-center justify-center overflow-hidden rounded-lg border bg-muted/50 p-3">
+                  <img
+                    src={stage.example.src}
+                    alt={stage.example.caption}
+                    className="max-h-full max-w-full rounded-md object-contain shadow-sm"
+                  />
+                </div>
+                <figcaption className="mt-2 text-center text-xs text-muted-foreground">{stage.example.caption}</figcaption>
+              </figure>
 
               {index < STAGES.length - 1 ? (
                 <div className="absolute top-1/2 -right-8 hidden -translate-y-1/2 md:block">
