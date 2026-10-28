@@ -43,22 +43,24 @@ const SYSTEM_PROMPT = `당신은 건설 현장이 받은 대외기관 점검(관
 - 같은 내용을 두 항목에 중복해서 넣지 마세요. 표의 칸 제목보다 실제 내용의 성격을 기준으로 항목을 고르세요.
 - 여러 줄 항목은 원문의 줄 구분과 "■", "-" 같은 머리 기호를 유지하고 줄바꿈(\\n)으로 구분하세요.`
 
-const nullableString = { type: ["string", "null"] }
+// 구조화 출력 스키마는 type 배열과 enum을 함께 쓰면 거부되므로 null 허용은 anyOf로 표현한다.
+const nullableString = { anyOf: [{ type: "string" }, { type: "null" }] }
+const nullableDate = { anyOf: [{ type: "string", description: "YYYY-MM-DD" }, { type: "null" }] }
 
 const OUTPUT_SCHEMA = {
   type: "object",
   properties: {
     title: nullableString,
     inspectorOrg: nullableString,
-    inspectedAt: { type: ["string", "null"], description: "YYYY-MM-DD" },
-    inspectedAtEnd: { type: ["string", "null"], description: "YYYY-MM-DD" },
+    inspectedAt: nullableDate,
+    inspectedAtEnd: nullableDate,
     inspectionTime: nullableString,
     inspectors: nullableString,
     purpose: nullableString,
     content: nullableString,
     resultDetail: nullableString,
     findings: nullableString,
-    result: { type: ["string", "null"], enum: [...SITE_INSPECTION_RESULTS, null] },
+    result: { anyOf: [{ type: "string", enum: SITE_INSPECTION_RESULTS }, { type: "null" }] },
   },
   required: [
     "title",
@@ -140,9 +142,11 @@ export async function parseInspectionReportPdf(buffer: Buffer): Promise<ParsedIn
     throw new Error("PDF에서 항목을 뽑아내지 못했습니다. 직접 입력해 주세요.")
   }
 
+  const inspectedAt = isoDateOrNull(parsed.inspectedAt)
+  const inspectedAtEnd = isoDateOrNull(parsed.inspectedAtEnd)
   return {
     ...parsed,
-    inspectedAt: isoDateOrNull(parsed.inspectedAt),
-    inspectedAtEnd: isoDateOrNull(parsed.inspectedAtEnd),
+    inspectedAt,
+    inspectedAtEnd: inspectedAtEnd === inspectedAt ? null : inspectedAtEnd,
   }
 }
