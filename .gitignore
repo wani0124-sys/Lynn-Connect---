@@ -21,5 +21,6 @@ coverage/
 Thumbs.db
 *.log
 
-# 실명/실제 공문·대화가 담긴 예시 이미지(대외기관 점검 기준 안내). public 저장소에 올리지 않는다.
-apps/web/public/inspection-guide/
+# 실명/실제 공문·대화가 담긴 원본 이미지 보관용. public 저장소에 올리지 않는다.
+# apps/web/public/inspection-guide/ 에는 이름·얼굴·현장명을 모자이크한 사본만 둔다.
+.private/
