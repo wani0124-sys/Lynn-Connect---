@@ -23,7 +23,7 @@ interface InspectionActionData {
   ok?: boolean
 }
 
-interface ParsedInspectionReport {
+export interface ParsedInspectionReport {
   title: string | null
   inspectorOrg: string | null
   inspectedAt: string | null
@@ -37,7 +37,7 @@ interface ParsedInspectionReport {
   resultDetail: string | null
 }
 
-interface ParsePdfActionData {
+export interface ParsePdfActionData {
   ok?: boolean
   error?: string
   parsed?: ParsedInspectionReport

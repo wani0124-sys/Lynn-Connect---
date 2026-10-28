@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Link, data, useFetcher, useLoaderData, useSearchParams, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
-import { AlertTriangle, ChevronDown, ChevronUp, Download, Paperclip, Pencil, Plus, Printer, Settings2, Trash2 } from "lucide-react"
+import { AlertTriangle, ChevronDown, ChevronUp, Download, Files, Paperclip, Pencil, Plus, Printer, Settings2, Trash2 } from "lucide-react"
 import { canWriteSite, isHeadquarters } from "~/entities/member/model/member"
 import type { SiteInspection } from "~/entities/site/model/site.types"
 import { InspectionReportTable } from "~/entities/site/ui/inspection-report-table"
@@ -32,6 +32,7 @@ import {
   validateSiteName,
 } from "~/features/sites/model/sites.schema"
 import { InspectionAiAnalysisPanel } from "~/features/sites/ui/inspection-ai-analysis-panel"
+import { InspectionBulkUploadModal } from "~/features/sites/ui/inspection-bulk-upload-modal"
 import { InspectionFormModal } from "~/features/sites/ui/inspection-form-modal"
 import { SiteManageModal } from "~/features/sites/ui/site-manage-modal"
 import { formatDate } from "~/shared/lib/format"
@@ -270,6 +271,7 @@ export default function SitesRoute() {
   const siteFetcher = useFetcher<typeof action>()
   const [manageOpen, setManageOpen] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
+  const [bulkOpen, setBulkOpen] = useState(false)
   const [editingInspection, setEditingInspection] = useState<SiteInspection | null>(null)
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const [showAllInspections, setShowAllInspections] = useState(false)
@@ -367,10 +369,16 @@ export default function SitesRoute() {
                   description={`${selectedSite.address ?? "주소 미등록"} · 총 ${inspections.length}건 점검`}
                   actions={
                     canWrite ? (
-                      <Button onClick={() => setFormOpen(true)}>
-                        <Plus className="size-4" aria-hidden />
-                        점검 기록 추가
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={() => setBulkOpen(true)}>
+                          <Files className="size-4" aria-hidden />
+                          여러 건 올리기
+                        </Button>
+                        <Button onClick={() => setFormOpen(true)}>
+                          <Plus className="size-4" aria-hidden />
+                          점검 기록 추가
+                        </Button>
+                      </div>
                     ) : null
                   }
                 />
@@ -517,6 +525,14 @@ export default function SitesRoute() {
                     }}
                     siteId={selectedSite.id}
                     editingInspection={editingInspection}
+                  />
+                ) : null}
+                {canWrite ? (
+                  <InspectionBulkUploadModal
+                    key={selectedSite.id}
+                    open={bulkOpen}
+                    onClose={() => setBulkOpen(false)}
+                    siteId={selectedSite.id}
                   />
                 ) : null}
                 </>
