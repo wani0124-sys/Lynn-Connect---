@@ -2,11 +2,15 @@ export type SiteInspectionResult = "적합" | "부적합" | "시정조치" | "�
 
 export const SITE_INSPECTION_RESULTS: SiteInspectionResult[] = ["적합", "부적합", "시정조치", "특이사항 없음"]
 
+// 진행 중(active) 현장과 준공(completed) 현장을 구분한다. 준공일은 따로 두지 않는다.
+export type SiteStatus = "active" | "completed"
+
 export type Site = {
   id: number
   name: string
   address: string | null
   sortOrder: number
+  status: SiteStatus
 }
 
 export type SiteInspectionAttachment = {

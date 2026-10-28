@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { getSupabaseServerClient } from "~/shared/lib/supabase.server"
 import type {
   Site,
+  SiteStatus,
   SiteInspection,
   SiteInspectionAttachment,
   SiteWithLatestInspection,
@@ -18,6 +19,8 @@ interface SiteRow {
   name: string
   address: string | null
   sort_order: number
+  // add_site_status migration 적용 전에는 컬럼이 없어 undefined로 온다.
+  status?: string
 }
 
 interface InspectionRow {
@@ -50,7 +53,13 @@ interface AttachmentRow {
 }
 
 function toSite(row: SiteRow): Site {
-  return { id: row.id, name: row.name, address: row.address, sortOrder: row.sort_order }
+  return {
+    id: row.id,
+    name: row.name,
+    address: row.address,
+    sortOrder: row.sort_order,
+    status: row.status === "completed" ? "completed" : "active",
+  }
 }
 
 function toAttachment(row: AttachmentRow): SiteInspectionAttachment {
@@ -176,6 +185,15 @@ export async function renameSite(id: number, name: string, address: string | nul
     if (error.code === "23505") throw new Error("이미 존재하는 현장명입니다.")
     throw new Error(`현장 정보를 수정하지 못했습니다: ${error.message}`)
   }
+}
+
+export async function setSiteStatus(id: number, status: SiteStatus): Promise<void> {
+  const { error } = await getSupabaseServerClient()
+    .from(TABLE_SITES)
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("id", id)
+
+  if (error) throw new Error(`현장 상태를 바꾸지 못했습니다: ${error.message}`)
 }
 
 export async function reorderSites(items: { id: number; sortOrder: number }[]): Promise<void> {

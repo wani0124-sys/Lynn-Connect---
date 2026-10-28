@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Plus, Trash2 } from "lucide-react"
-import type { Site } from "~/entities/site/model/site.types"
+import type { Site, SiteStatus } from "~/entities/site/model/site.types"
+import { Badge } from "~/shared/ui/badge"
 import { Button } from "~/shared/ui/button"
 import { Field } from "~/shared/ui/field"
 import { Input } from "~/shared/ui/input"
@@ -15,10 +16,21 @@ export interface SiteManageModalProps {
   onCreate: (name: string, address: string) => void
   onRename: (id: number, name: string, address: string) => void
   onDelete: (id: number) => void
+  onSetStatus: (id: number, status: SiteStatus) => void
   onReorder: (items: { id: number; sortOrder: number }[]) => void
 }
 
-export function SiteManageModal({ open, onClose, sites, pending, onCreate, onRename, onDelete, onReorder }: SiteManageModalProps) {
+export function SiteManageModal({
+  open,
+  onClose,
+  sites,
+  pending,
+  onCreate,
+  onRename,
+  onDelete,
+  onSetStatus,
+  onReorder,
+}: SiteManageModalProps) {
   const [name, setName] = useState("")
   const [address, setAddress] = useState("")
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -47,7 +59,7 @@ export function SiteManageModal({ open, onClose, sites, pending, onCreate, onRen
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="현장 관리" description="현장을 추가·수정·삭제하고 드래그해서 순서를 변경합니다">
+    <Modal open={open} onClose={onClose} title="현장 관리" description="현장을 추가·수정·삭제하고 드래그해서 순서를 변경합니다. 준공된 현장은 준공 처리하면 따로 모아 보여 줍니다">
       <div className="space-y-4">
         <div className="flex items-end gap-2">
           <Field label="현장명" htmlFor="new-site-name" className="flex-1">
@@ -88,20 +100,34 @@ export function SiteManageModal({ open, onClose, sites, pending, onCreate, onRen
                   <div className="flex min-w-0 items-center gap-2">
                     <DragHandle {...drag} />
                     <button type="button" onClick={() => startEdit(site)} className="min-w-0 text-left hover:underline">
-                      <span className="block truncate text-sm font-medium">{site.name}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-medium">{site.name}</span>
+                        {site.status === "completed" ? <Badge className="shrink-0">준공</Badge> : null}
+                      </span>
                       {site.address ? <span className="block truncate text-xs text-muted-foreground">{site.address}</span> : null}
                     </button>
                   </div>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => onDelete(site.id)}
-                    disabled={pending}
-                    aria-label="삭제"
-                  >
-                    <Trash2 className="size-4 text-danger" aria-hidden />
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onSetStatus(site.id, site.status === "completed" ? "active" : "completed")}
+                      disabled={pending}
+                    >
+                      {site.status === "completed" ? "진행 중으로" : "준공 처리"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => onDelete(site.id)}
+                      disabled={pending}
+                      aria-label="삭제"
+                    >
+                      <Trash2 className="size-4 text-danger" aria-hidden />
+                    </Button>
+                  </div>
                 </div>
               )
             }

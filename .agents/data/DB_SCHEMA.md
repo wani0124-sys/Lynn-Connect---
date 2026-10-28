@@ -327,6 +327,7 @@ Columns:
   name text
   address text (nullable)
   sort_order int
+  status text default 'active' -- 'active'(진행 중) | 'completed'(준공). check constraint sites_status_check
   created_at timestamptz
   updated_at timestamptz
 Primary key: id
@@ -335,10 +336,12 @@ Indexes: 없음(테이블 크기가 작아 근거 부족, monitoring candidate)
 Unique constraints: sites_name_key (name)
 RLS policies: RLS enabled. sites_no_direct_access(전체 거부, anon/authenticated) — service role로만 접근.
 RPC/functions: 없음
-Related APIs: apps/web/app/routes/sites.tsx (loader/action, intent=site.*) — apps/web/app/features/sites/model/sites.repository.server.ts를 직접 호출
+Related APIs: apps/web/app/routes/sites.tsx (loader/action, intent=site.*, 2026-10-28 site.setStatus 추가) — apps/web/app/features/sites/model/sites.repository.server.ts를 직접 호출
 Related frontend screens: /sites (현장 카드 목록 + 현장 관리 모달), 대시보드 현장 점검 위젯
-Migration file: supabase/migrations/20260713090000_site_inspections.sql
-Notes: 현장 삭제 시 site_inspections/site_inspection_attachments는 on delete cascade로 함께 삭제되며, 삭제 전 앱 코드(deleteSite)에서 첨부파일 storage 객체를 먼저 정리한다.
+Migration file: supabase/migrations/20260713090000_site_inspections.sql, supabase/migrations/20261028071312_add_site_status.sql(status 추가)
+Notes:
+  - 2026-10-28 status 추가. /sites 현장 점검결과 탭에서 '진행 중 / 준공' 전환으로 나눠 보여 주고, 현장 관리 모달에서 본사만 '준공 처리/진행 중으로'를 바꾼다. 준공일은 저장하지 않는다. 앱 코드는 컬럼이 없으면 active로 간주해 migration 적용 전 배포에도 깨지지 않는다. 대시보드 위젯·회원가입·멤버 관리의 현장 목록은 아직 status를 구분하지 않는다.
+  - 현장 삭제 시 site_inspections/site_inspection_attachments는 on delete cascade로 함께 삭제되며, 삭제 전 앱 코드(deleteSite)에서 첨부파일 storage 객체를 먼저 정리한다.
 
 Schema: public
 Table: site_inspections
