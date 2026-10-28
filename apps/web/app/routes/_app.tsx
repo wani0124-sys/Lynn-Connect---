@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Form, Link, NavLink, Outlet, redirect, useLoaderData, type LoaderFunctionArgs } from "react-router"
-import { Bell, ChevronDown, LogOut, Menu, PanelLeft, PanelLeftClose, Waypoints } from "lucide-react"
+import { ChevronDown, LogOut, Menu, PanelLeft, PanelLeftClose, Waypoints } from "lucide-react"
 import { buildMenuTree } from "~/entities/sidebar-menu/lib/build-menu-tree"
 import { sidebarMenuRouteIcon, type RenderNavNode } from "~/entities/sidebar-menu/model/sidebar-menu.types"
 import { MEMBER_ROLE_LABEL } from "~/entities/member/model/member"
@@ -10,7 +10,6 @@ import { cn } from "~/shared/lib/cn"
 import { navItems, secondaryNavItems } from "~/shared/config/nav"
 import { useUiLayoutStore } from "~/shared/store/ui-layout.store"
 import { Button } from "~/shared/ui/button"
-import { Input } from "~/shared/ui/input"
 
 // 정적 nav.ts 배열을 렌더 트리 모양으로 맞춘다(DB 조회 실패 시 fallback으로 사용).
 function fromStaticNavItems(items: typeof navItems): RenderNavNode[] {
@@ -275,14 +274,7 @@ export default function AppLayout() {
             <Menu aria-hidden />
           </Button>
 
-          <div className="hidden flex-1 sm:block">
-            <Input placeholder="검색" className="max-w-sm" />
-          </div>
-
-          <div className="flex flex-1 items-center justify-end gap-2 sm:flex-none">
-            <Button variant="ghost" size="icon" aria-label="알림">
-              <Bell aria-hidden />
-            </Button>
+          <div className="flex flex-1 items-center justify-end gap-2">
             <div className="flex items-center gap-2 pl-1">
               <div
                 className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary"
