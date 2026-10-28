@@ -1,8 +1,8 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Link, data, useFetcher, useLoaderData, useSearchParams, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router"
 import { AlertTriangle, ChevronDown, ChevronUp, Download, Files, Paperclip, Pencil, Plus, Printer, Settings2, Trash2 } from "lucide-react"
 import { canWriteSite, isHeadquarters } from "~/entities/member/model/member"
-import type { SiteInspection } from "~/entities/site/model/site.types"
+import type { SiteInspection, SiteStatus } from "~/entities/site/model/site.types"
 import { InspectionReportTable } from "~/entities/site/ui/inspection-report-table"
 import { InspectionResultBadge } from "~/entities/site/ui/inspection-result-badge"
 import { InspectionStandardGuide } from "~/entities/site/ui/inspection-standard-guide"
@@ -22,6 +22,7 @@ import {
   listSitesWithLatestInspection,
   renameSite,
   reorderSites,
+  setSiteStatus,
   updateInspection,
 } from "~/features/sites/model/sites.repository.server"
 import {
@@ -126,6 +127,13 @@ export async function action({ request }: ActionFunctionArgs) {
       case "site.delete": {
         await requireHeadquarters(request)
         await deleteSite(Number(form.get("id")))
+        return { ok: true }
+      }
+      case "site.setStatus": {
+        await requireHeadquarters(request)
+        const status = String(form.get("status") ?? "")
+        if (status !== "active" && status !== "completed") return data({ error: "알 수 없는 현장 상태입니다." }, { status: 400 })
+        await setSiteStatus(Number(form.get("id")), status)
         return { ok: true }
       }
       case "site.reorder": {
@@ -279,6 +287,11 @@ export default function SitesRoute() {
 
   const pageTitle = usePageMenuTitle("/sites", "현장 점검")
   const sorted = [...sites].sort((a, b) => a.sortOrder - b.sortOrder)
+  // 진행 중/준공 중 지금 보고 있는 묶음. 선택된 현장이 있으면 그 현장의 상태를 따른다.
+  const [siteGroup, setSiteGroup] = useState<SiteStatus>(selectedSite?.status ?? "active")
+  const groupSites = sorted.filter((site) => site.status === siteGroup)
+  const activeCount = sorted.filter((site) => site.status === "active").length
+  const showSelectedSite = selectedSite !== null && selectedSite.status === siteGroup
   const actionError =
     actionFetcher.data && "error" in actionFetcher.data
       ? actionFetcher.data.error
@@ -296,13 +309,26 @@ export default function SitesRoute() {
     setShowAllInspections(false)
   }
 
+  useEffect(() => {
+    // 보고 있던 현장을 준공 처리하거나 되돌리면 그 현장이 속한 묶음으로 함께 옮겨 간다.
+    if (selectedSite) setSiteGroup(selectedSite.status)
+  }, [selectedSite?.id, selectedSite?.status])
+
+  function selectGroup(value: string) {
+    const group: SiteStatus = value === "completed" ? "completed" : "active"
+    setSiteGroup(group)
+    const first = sorted.find((site) => site.status === group)
+    if (first) selectSite(String(first.id))
+  }
+
   function selectTopTab(value: string) {
     if (value === STANDARD_TAB_VALUE || value === AI_TAB_VALUE) {
       selectSite(value)
       return
     }
     // "현장 점검결과"로 전환 시, 이미 선택된 현장이 있으면 유지하고 없으면 첫 번째 현장을 기본 선택한다.
-    selectSite(selectedSite ? String(selectedSite.id) : String(sorted[0]?.id ?? ""))
+    const firstActive = sorted.find((site) => site.status === "active") ?? sorted[0]
+    selectSite(selectedSite ? String(selectedSite.id) : String(firstActive?.id ?? ""))
   }
 
   return (
@@ -353,12 +379,33 @@ export default function SitesRoute() {
           ) : (
             <>
               <Tabs
-                items={sorted.map((site) => ({ value: String(site.id), label: site.name }))}
-                value={selectedSite ? String(selectedSite.id) : ""}
-                onChange={selectSite}
+                items={[
+                  { value: "active", label: `진행 중 (${activeCount})` },
+                  { value: "completed", label: `준공 (${sorted.length - activeCount})` },
+                ]}
+                value={siteGroup}
+                onChange={selectGroup}
+                className="w-fit"
               />
 
-              {!selectedSite ? (
+              {groupSites.length > 0 ? (
+                <Tabs
+                  items={groupSites.map((site) => ({ value: String(site.id), label: site.name }))}
+                  value={showSelectedSite ? String(selectedSite.id) : ""}
+                  onChange={selectSite}
+                />
+              ) : null}
+
+              {groupSites.length === 0 ? (
+                <Card className="p-5">
+                  <EmptyState
+                    title={siteGroup === "completed" ? "준공된 현장이 없습니다" : "진행 중인 현장이 없습니다"}
+                    description={
+                      siteGroup === "completed" ? "현장 관리에서 준공된 현장을 '준공 처리'하면 여기에 모입니다." : "현장 관리에서 현장을 추가하세요."
+                    }
+                  />
+                </Card>
+              ) : !showSelectedSite ? (
                 <Card className="p-5">
                   <EmptyState title="현장을 찾을 수 없습니다" description="다른 탭을 선택해 보세요." />
                 </Card>
@@ -553,6 +600,9 @@ export default function SitesRoute() {
             siteFetcher.submit({ intent: "site.rename", id: String(id), name, address }, { method: "post" })
           }
           onDelete={(id) => siteFetcher.submit({ intent: "site.delete", id: String(id) }, { method: "post" })}
+          onSetStatus={(id, status) =>
+            siteFetcher.submit({ intent: "site.setStatus", id: String(id), status }, { method: "post" })
+          }
           onReorder={(items) => {
             if (items.length) siteFetcher.submit({ intent: "site.reorder", items: JSON.stringify(items) }, { method: "post" })
           }}
