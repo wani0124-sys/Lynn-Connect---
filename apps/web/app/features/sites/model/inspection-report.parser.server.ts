@@ -1,4 +1,9 @@
-import { extractPdfText } from "~/shared/lib/pdf.server"
+import Anthropic from "@anthropic-ai/sdk"
+import { SITE_INSPECTION_RESULTS } from "~/entities/site/model/site.types"
+import { getAnthropicClient } from "~/shared/lib/anthropic.server"
+
+const REPORT_PARSE_MODEL = "claude-opus-5-5"
+const MAX_OUTPUT_TOKENS = 16000
 
 export interface ParsedInspectionReport {
   title: string | null
@@ -14,125 +19,130 @@ export interface ParsedInspectionReport {
   resultDetail: string | null
 }
 
-// "[현장명] ... 점검 결과 보고" 같은 표 형식 결과보고 PDF 전용 파서다.
-// PDF 텍스트 추출 순서는 원본 문서(주로 한글/워드로 만든 표)의 내부 구조에 따라 달라져서
-// 완벽하지 않다 — 라벨을 앵커로 삼아 앞/뒤 텍스트를 잘라내는 휴리스틱이며, 사용자가 결과를
-// 반드시 확인·수정한 뒤 저장하는 것을 전제로 한다.
+// 결과보고 PDF는 표 형식이 문서마다 달라서 텍스트 순서로 자르면 칸이 뒤섞인다. PDF를 그대로
+// Claude에 보내 표를 읽게 하고, 점검 기록 폼 항목에 맞춘 JSON으로 받는다. 추출 결과는 사용자가
+// 확인·수정한 뒤 저장하는 것을 전제로 한다.
 
-const LABEL = {
-  title: /^점\s*검\s*명\s+(.+)$/m,
-  inspectorOrg: /^점검\s*기관\s*(?:\/\s*주체)?\s+(.+)$/m,
-  inspectedAt: /^점검\s*일시\s+(.+)$/m,
-  inspectorsHeader: /^점\s*검\s*자\s*$/,
-  contentMarker: /^\[?\s*점검\s*내용\s*\]?\s*$/,
-  resultMarker: /^\[?\s*점검\s*결과\s*\]?\s*$/,
-  inspectionMatters: /^점검\s*사항\s*$/,
-  resultSummary: /^점검\s*결과\s+(.+)$/m,
-  purposeLabel: /^점검\s*취지\s*$/,
-  findings: /^지적\s*사항\s+(.+)$/m,
+const SYSTEM_PROMPT = `당신은 건설 현장이 받은 대외기관 점검(관공서·감리단·발주처 등)의 결과보고 PDF를 읽고,
+점검 기록 입력 폼의 각 항목에 들어갈 내용을 뽑아내는 역할입니다.
+
+항목별 기준:
+- title(점검명): "점검명" 칸의 값. 예: "화성시 공동주택 품질점검 1차"
+- inspectorOrg(점검기관/주체): 점검을 실시한 기관. 여러 곳이면 " 및 "로 잇는다.
+- inspectedAt / inspectedAtEnd: 점검 시작일과 종료일(YYYY-MM-DD). 하루짜리면 inspectedAtEnd는 null.
+- inspectionTime: 점검 시간. 예: "14:00 ~ 16:00", 여러 날이면 "각 10:00 ~ 15:00"
+- inspectors(점검자): 점검 인원 구성. 원문의 줄 구분을 유지한다.
+- purpose(점검취지): 점검을 실시한 목적.
+- content(점검내용): 무엇을 점검했는지(점검 항목, 분야별 점검 대상). 보통 "[점검내용]" 아래에 있다.
+- resultDetail(점검결과 상세): 점검 결과의 세부 내용·평가. 보통 "[점검결과]" 아래에 있다.
+- findings(지적사항/요청사항): 지적·지도·요청·시정 사항. 원문의 "지적사항", "지도사항", "요청사항" 칸 내용.
+- result(점검 결과): 전체 판정을 ${SITE_INSPECTION_RESULTS.map((r) => `"${r}"`).join(", ")} 중 하나로 고른다.
+
+규칙:
+- 문서에 있는 내용만 옮기고, 요약하거나 고쳐 쓰지 마세요. 해당 내용이 문서에 없으면 null.
+- 같은 내용을 두 항목에 중복해서 넣지 마세요. 표의 칸 제목보다 실제 내용의 성격을 기준으로 항목을 고르세요.
+- 여러 줄 항목은 원문의 줄 구분과 "■", "-" 같은 머리 기호를 유지하고 줄바꿈(\\n)으로 구분하세요.`
+
+const nullableString = { type: ["string", "null"] }
+
+const OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    title: nullableString,
+    inspectorOrg: nullableString,
+    inspectedAt: { type: ["string", "null"], description: "YYYY-MM-DD" },
+    inspectedAtEnd: { type: ["string", "null"], description: "YYYY-MM-DD" },
+    inspectionTime: nullableString,
+    inspectors: nullableString,
+    purpose: nullableString,
+    content: nullableString,
+    resultDetail: nullableString,
+    findings: nullableString,
+    result: { type: ["string", "null"], enum: [...SITE_INSPECTION_RESULTS, null] },
+  },
+  required: [
+    "title",
+    "inspectorOrg",
+    "inspectedAt",
+    "inspectedAtEnd",
+    "inspectionTime",
+    "inspectors",
+    "purpose",
+    "content",
+    "resultDetail",
+    "findings",
+    "result",
+  ],
+  additionalProperties: false,
 }
 
-function toLines(text: string): string[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-}
-
-function sliceBetween(lines: string[], startExclusive: number, endExclusive: number): string[] {
-  if (startExclusive < 0 || endExclusive < 0 || startExclusive >= endExclusive) return []
-  return lines.slice(startExclusive + 1, endExclusive)
-}
-
-function findIndex(lines: string[], pattern: RegExp): number {
-  return lines.findIndex((line) => pattern.test(line))
-}
-
-function findBracketMarkerIndex(lines: string[], label: "점검내용" | "점검결과"): number {
-  return lines.findIndex((line) => line === `[${label}]` || line === label)
-}
-
-// "2026년 7월 9일(목)~7월 10일(금), 각 10:00 ~ 15:00" 같은 문자열에서 시작일/종료일/시간을 뽑는다.
-function parseInspectionPeriod(raw: string | null): { start: string | null; end: string | null; time: string | null } {
-  if (!raw) return { start: null, end: null, time: null }
-
-  const startMatch = raw.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/)
-  if (!startMatch) return { start: null, end: null, time: null }
-  const year = startMatch[1]
-  const start = `${year}-${startMatch[2].padStart(2, "0")}-${startMatch[3].padStart(2, "0")}`
-
-  const afterStart = raw.slice((startMatch.index ?? 0) + startMatch[0].length)
-  let end: string | null = null
-  const endMatch = afterStart.match(/^[^\d]{0,6}(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일/)
-  if (endMatch && /^[\s~∼-]/.test(afterStart.replace(/\([^)]*\)/, ""))) {
-    const endYear = endMatch[1] ?? year
-    end = `${endYear}-${endMatch[2].padStart(2, "0")}-${endMatch[3].padStart(2, "0")}`
-  }
-
-  const timeMatch = raw.match(/(\d{1,2}:\d{2}\s*[~∼-]\s*\d{1,2}:\d{2})/)
-  const timePrefixMatch = raw.match(/,\s*([^,]*\d{1,2}:\d{2}[^,]*)$/)
-  const time = timePrefixMatch?.[1]?.trim() ?? timeMatch?.[1]?.trim() ?? null
-
-  return { start, end, time }
+function isoDateOrNull(value: string | null): string | null {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null
 }
 
 export async function parseInspectionReportPdf(buffer: Buffer): Promise<ParsedInspectionReport> {
-  const text = await extractPdfText(buffer)
-  const lines = toLines(text)
+  const client = getAnthropicClient()
 
-  const title = text.match(LABEL.title)?.[1]?.trim() ?? null
-  const inspectorOrg = text.match(LABEL.inspectorOrg)?.[1]?.trim() ?? null
-  const inspectedAtRaw = text.match(LABEL.inspectedAt)?.[1]?.trim() ?? null
-  const { start, end, time } = parseInspectionPeriod(inspectedAtRaw)
+  let message: Anthropic.Beta.BetaMessage
+  try {
+    message = await client.beta.messages.create({
+      model: REPORT_PARSE_MODEL,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      betas: ["server-side-fallback-2026-06-01"],
+      fallbacks: [{ model: "claude-opus-4-8" }],
+      output_config: { effort: "medium", format: { type: "json_schema", schema: OUTPUT_SCHEMA } },
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf", data: buffer.toString("base64") },
+            },
+            { type: "text", text: "이 결과보고 PDF에서 점검 기록 항목을 뽑아 주세요." },
+          ],
+        },
+      ],
+    })
+  } catch (error) {
+    if (error instanceof Anthropic.RateLimitError) {
+      throw new Error("요청이 많아 잠시 후 다시 시도해 주세요.")
+    }
+    if (error instanceof Anthropic.InternalServerError) {
+      throw new Error("AI 서버가 일시적으로 혼잡합니다. 잠시 후 다시 시도해 주세요.")
+    }
+    if (error instanceof Anthropic.APIConnectionError) {
+      throw new Error("AI 서버에 연결하지 못했습니다. 네트워크 상태를 확인하고 다시 시도해 주세요.")
+    }
+    if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
+      throw new Error("AI 기능 설정에 문제가 있습니다. 관리자에게 문의해 주세요.")
+    }
+    if (error instanceof Anthropic.BadRequestError) {
+      throw new Error("PDF를 읽지 못했습니다. 파일이 손상되었거나 너무 크지 않은지 확인해 주세요.")
+    }
+    throw new Error("PDF 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+  }
 
-  const inspectorsHeaderIdx = findIndex(lines, LABEL.inspectorsHeader)
-  const contentMarkerIdx = findBracketMarkerIndex(lines, "점검내용")
-  const resultMarkerIdx = findBracketMarkerIndex(lines, "점검결과")
-  const mattersIdx = findIndex(lines, LABEL.inspectionMatters)
+  if (message.stop_reason === "refusal" || message.stop_reason === "max_tokens") {
+    throw new Error("PDF에서 항목을 뽑아내지 못했습니다. 직접 입력해 주세요.")
+  }
 
-  const inspectors =
-    inspectorsHeaderIdx !== -1
-      ? sliceBetween(lines, inspectorsHeaderIdx, contentMarkerIdx !== -1 ? contentMarkerIdx : lines.length).join("\n") || null
-      : null
+  const json = message.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("")
 
-  const content =
-    contentMarkerIdx !== -1
-      ? sliceBetween(lines, contentMarkerIdx, resultMarkerIdx !== -1 ? resultMarkerIdx : lines.length).join("\n") || null
-      : null
-
-  const resultDetail =
-    resultMarkerIdx !== -1
-      ? sliceBetween(lines, resultMarkerIdx, mattersIdx !== -1 ? mattersIdx : lines.length).join("\n") || null
-      : null
-
-  const result = text.match(LABEL.resultSummary)?.[1]?.trim() ?? null
-
-  const purposeLabelIdx = findIndex(lines, LABEL.purposeLabel)
-  const resultSummaryIdx = lines.findIndex((line) => LABEL.resultSummary.test(line))
-  const purpose =
-    purposeLabelIdx !== -1 && resultSummaryIdx !== -1 && resultSummaryIdx < purposeLabelIdx
-      ? sliceBetween(lines, resultSummaryIdx, purposeLabelIdx).join(" ").trim() || null
-      : null
-
-  const findingsLabelMatch = text.match(LABEL.findings)
-  let findings: string | null = null
-  if (findingsLabelMatch) {
-    const findingsLineIdx = lines.findIndex((line) => LABEL.findings.test(line))
-    const tail = findingsLineIdx !== -1 ? lines.slice(findingsLineIdx + 1) : []
-    findings = [findingsLabelMatch[1].trim(), ...tail].join("\n").trim() || null
+  let parsed: ParsedInspectionReport
+  try {
+    parsed = JSON.parse(json) as ParsedInspectionReport
+  } catch {
+    throw new Error("PDF에서 항목을 뽑아내지 못했습니다. 직접 입력해 주세요.")
   }
 
   return {
-    title,
-    inspectorOrg,
-    inspectedAt: start,
-    inspectedAtEnd: end,
-    inspectionTime: time,
-    inspectors,
-    purpose,
-    findings,
-    result,
-    content,
-    resultDetail,
+    ...parsed,
+    inspectedAt: isoDateOrNull(parsed.inspectedAt),
+    inspectedAtEnd: isoDateOrNull(parsed.inspectedAtEnd),
   }
 }
