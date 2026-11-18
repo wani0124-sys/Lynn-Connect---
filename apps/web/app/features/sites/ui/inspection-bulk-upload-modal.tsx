@@ -144,7 +144,7 @@ export function InspectionBulkUploadModal({ open, onClose, siteId }: InspectionB
 
     const skipped: string[] = []
     if (pdfs.length < all.length) skipped.push(`PDF가 아닌 파일 ${all.length - pdfs.length}개`)
-    if (sized.length < pdfs.length) skipped.push(`30MB를 넘는 파일 ${pdfs.length - sized.length}개`)
+    if (sized.length < pdfs.length) skipped.push(`50MB를 넘는 파일 ${pdfs.length - sized.length}개`)
     if (accepted.length < sized.length) skipped.push(`한 번에 ${MAX_FILES}개를 넘는 파일 ${sized.length - accepted.length}개`)
     setNotice(skipped.length ? `${skipped.join(", ")}는 제외했습니다.` : null)
 
