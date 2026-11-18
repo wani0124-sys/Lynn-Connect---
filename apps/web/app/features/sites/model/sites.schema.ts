@@ -1,4 +1,4 @@
-export const MAX_INSPECTION_ATTACHMENT_SIZE_BYTES = 30 * 1024 * 1024 // 30MB
+export const MAX_INSPECTION_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024 // 50MB (Supabase 무료 요금제 파일당 상한)
 
 export function validateSiteName(name: string): string | null {
   if (!name.trim()) return "현장명을 입력하세요."
@@ -27,6 +27,6 @@ export function validateInspectedAt(inspectedAt: string): string | null {
 
 export function validateInspectionAttachmentFile(file: File): string | null {
   if (file.size === 0) return "파일을 선택해 주세요."
-  if (file.size > MAX_INSPECTION_ATTACHMENT_SIZE_BYTES) return "파일 크기는 30MB를 넘을 수 없습니다."
+  if (file.size > MAX_INSPECTION_ATTACHMENT_SIZE_BYTES) return "파일 크기는 50MB를 넘을 수 없습니다."
   return null
 }
